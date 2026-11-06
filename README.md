@@ -1,6 +1,4 @@
-# AI Learning Assistant — Backend
-
-Repository backend độc lập: Express API, Worker và packages nội bộ. Chỉ có khung setup, chưa xây dựng tính năng nghiệp vụ.
+# HustVa — Backend
 
 ```text
 apps/api/          Express API
