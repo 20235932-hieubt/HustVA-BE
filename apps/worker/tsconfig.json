@@ -1,0 +1,8 @@
+{
+  "extends": "@ai/config/tsconfig/node",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*.ts"]
+}
