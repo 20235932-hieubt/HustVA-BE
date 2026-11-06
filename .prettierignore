@@ -2,6 +2,6 @@ node_modules
 .next
 dist
 coverage
-.turbo
 pnpm-lock.yaml
 next-env.d.ts
+.local
