@@ -1,51 +1,33 @@
-# HustVa — Backend
+# HustVA Backend
 
-```text
-apps/api/          Express API
-apps/worker/       Worker độc lập
-packages/config/   TypeScript config
-packages/shared/   Placeholder types/schema
-packages/database/ Placeholder database client/migration
-packages/logger/   Placeholder logging
-infrastructure/    SQL tạo extension pgvector
-```
+API crawl nội dung công khai HUST từ HTML và PDF. Gọi API với nguồn cần lấy, API thực hiện crawl và trả đầy đủ nội dung sau khi hoàn tất. Không có app Worker hoặc lịch tự động.
 
-## Cài đặt và chạy
+Backend là một ứng dụng với một `package.json`. `src/app.ts` cấu hình Express, `src/server.ts` mở API và `src/crawler/` chứa toàn bộ logic crawl. Luồng xử lý: request chọn nguồn → tải HTML/PDF → trích xuất → lưu → trả JSON.
 
-Yêu cầu Node.js 22 theo `.nvmrc`, pnpm 10.33.0. Docker Desktop cần cho PostgreSQL/Redis.
+Tại thư mục `be`, dùng Node.js 22 và pnpm 10.33.0:
 
 ```powershell
-corepack.cmd enable
-corepack.cmd install
 pnpm.cmd install --frozen-lockfile
-Copy-Item apps/api/.env.example apps/api/.env
-Copy-Item apps/worker/.env.example apps/worker/.env
-pnpm.cmd infra:up
 pnpm.cmd dev
 ```
 
-Nếu chưa bật được Corepack, thay `pnpm.cmd <lệnh>` bằng `npm.cmd exec --yes --package=pnpm@10.33.0 -- pnpm <lệnh>`.
+Nếu chưa có pnpm trên PATH, thay `pnpm.cmd` bằng `npm.cmd exec --yes --package=pnpm@10.33.0 -- pnpm`.
 
-`dev` chạy API và Worker. Có thể chạy riêng bằng `pnpm.cmd --filter api dev` và `pnpm.cmd --filter worker dev`. API health: <http://localhost:4000/api/v1/health>. Worker chỉ ghi log sẵn sàng, chưa consume queue. Khung ứng dụng có thể chạy khi chưa có Docker bằng cách bỏ qua `infra:up`.
+Trong Postman gọi:
 
-`WEB_ORIGIN` cấu hình origin của frontend, mặc định `http://localhost:3000`. BE giao tiếp với frontend qua HTTP; không dùng mã nguồn hoặc dependencies của frontend.
-
-Compose chỉ dành cho local, giữ dữ liệu trong volume. SQL extension chạy lần đầu khi tạo volume. `pnpm.cmd infra:down` dừng service và giữ volume.
-
-## Kiểm tra và Git
-
-```powershell
-pnpm.cmd format:check
-pnpm.cmd lint
-pnpm.cmd typecheck
-pnpm.cmd test
-pnpm.cmd build
+```http
+POST http://localhost:4000/api/v1/crawler/crawl?sourceId=library
 ```
 
-Test runner hiện cho phép chưa có test case. Build chỉ biên dịch bộ khung. Cài dependencies tự kích hoạt Husky trong Git repo này: pre-commit chạy lint-staged/Prettier, commit-msg kiểm tra Conventional Commits. Dùng nhánh `feature/<tên>`, `fix/<tên>`, `chore/<tên>` và review qua pull request.
+Không cần body. Response `200` chứa `{ run, documents }`, trong đó `documents` là toàn bộ nội dung trích xuất được. API đọc hết các bài, phân trang và PDF phát hiện được trong phạm vi nguồn đã định nghĩa. Xem các nguồn bằng `GET /api/v1/crawler/sources`.
 
-CI thuộc riêng repository này và chạy khi push/PR trên GitHub. Repository local chưa có remote và chưa có commit. Chưa kiểm chứng Docker vì máy chưa có Docker Desktop.
+Một lượt có thể chạy lâu; đặt Request timeout của Postman thành `0` để chờ. Nếu có lượt khác đang crawl, API trả `409`. Không crawl tự động khi khởi động API.
 
-## Phần việc để sau
+Console in tiến trình; nội dung và bản gốc lưu trong `.local/crawler`. Các file `exports/latest.txt` và `latest.jsonl` được cập nhật sau mỗi lượt. PDF scan/hình ảnh chưa có OCR; kết quả có cảnh báo khi cần đối chiếu.
 
-Backend/Database: Prisma, schema, migration, auth, middleware lỗi, logging và OpenAPI. Worker/AI: ingestion, crawler, chunking, embedding, scheduled crawl, RAG và decision system. Các phần này chưa triển khai.
+- [Cách gọi bằng Postman](docs/development/crawler-local.md)
+- [Collection Postman](docs/postman/HustVA-Crawler.postman_collection.json)
+- [Phân tích nguồn và logic](docs/crawler-analysis.md)
+- [Kết luận khảo sát nguồn](docs/crawl-sources.md)
+
+Kiểm tra code bằng `pnpm.cmd lint`, `pnpm.cmd typecheck`, `pnpm.cmd build`. Kiểm thử chức năng crawler do bạn thực hiện qua Postman. Không cần Docker để chạy crawler.
