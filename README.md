@@ -29,5 +29,9 @@ Console in tiến trình; nội dung và bản gốc lưu trong `.local/crawler`
 - [Collection Postman](docs/postman/HustVA-Crawler.postman_collection.json)
 - [Phân tích nguồn và logic](docs/crawler-analysis.md)
 - [Kết luận khảo sát nguồn](docs/crawl-sources.md)
+- [Kế hoạch ReAct agent dùng MongoDB Atlas](docs/development/react-agent-plan.md)
+- [Setup MongoDB Atlas cho dữ liệu và Vector Search](docs/development/cloud-databases.md)
+
+Kho tri thức và agent dùng một MongoDB Atlas cluster, bao gồm Vector Search. Điền `.env` theo hướng dẫn rồi chạy `pnpm.cmd db:check` để kiểm tra kết nối, `pnpm.cmd db:setup` để chuẩn bị collections/index cần thiết. Vector index chỉ được tạo khi có `EMBEDDING_DIMENSION`. Chưa cần khởi động Docker hoặc dịch vụ DB khác. Crawler vẫn lưu file độc lập; các lệnh setup không tự import dữ liệu crawl.
 
 Kiểm tra code bằng `pnpm.cmd lint`, `pnpm.cmd typecheck`, `pnpm.cmd build`. Kiểm thử chức năng crawler do bạn thực hiện qua Postman. Không cần Docker để chạy crawler.
