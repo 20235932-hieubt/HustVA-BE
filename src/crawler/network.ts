@@ -83,7 +83,10 @@ export class PublicFetcher implements Fetcher {
     let url = allowedUrl(value, this.source.hosts);
     for (let redirects = 0; redirects <= 5; redirects++) {
       if (!isRobots) await this.checkRobots(url);
-      const interval = this.rules.get(url.origin)?.delayMs ?? 1100;
+      const interval = Math.max(
+        this.source.adapter === 'library' ? 10_000 : 1100,
+        this.rules.get(url.origin)?.delayMs ?? 1100,
+      );
       const wait = (previous.get(url.origin) ?? 0) + interval - Date.now();
       if (wait > 0) await delay(wait, undefined, { signal: this.signal });
       previous.set(url.origin, Date.now());

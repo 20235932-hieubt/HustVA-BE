@@ -25,11 +25,19 @@ export function htmlContent(
   if (!['text/html', 'application/xhtml+xml', ''].includes(response.mime))
     throw new CrawlError('MIME', 'Response không phải HTML');
   const $ = load(Buffer.from(response.bytes).toString('utf8'));
+  const pageUrl = new URL(response.url);
+  const libraryListing =
+    source.adapter === 'library' &&
+    /^\/(?:vi\/)?(?:sanpham_dichvu|page-tr-gi-p)\/?$/u.test(pageUrl.pathname);
   const selector = {
     ctt: '.col-md-9',
     hust: '#news-bodyhtml',
     sdh: '#MainContent_ctl00_ctl00_lblPageContent',
-    library: '.field-name-body',
+    library: libraryListing
+      ? /sanpham_dichvu/u.test(pageUrl.pathname)
+        ? '#quicktabs-tabpage-s_n_ph_m_d_ch_v_-1'
+        : '#block-system-main'
+      : '.field-name-body, .field-name-field-body',
   }[source.adapter];
   const content = $(selector).first();
   if (!content.length)
@@ -44,19 +52,40 @@ export function htmlContent(
     ) || normalize($('title').text());
   const targets: CrawlTarget[] = [];
   const listing =
-    source.adapter === 'ctt' &&
-    /DisplayQuyChe|DisplayListBaiViet|DisplayListKeHoach/iu.test(new URL(response.url).pathname);
+    libraryListing ||
+    (source.adapter === 'ctt' &&
+      /DisplayQuyChe|DisplayListBaiViet|DisplayListKeHoach/iu.test(pageUrl.pathname));
   const add = (href: string | undefined, kind: 'html' | 'pdf', title?: string): void => {
     if (!href) return;
     try {
-      const url = allowedUrl(new URL(href, response.url).href, source.hosts).href;
+      const resolved = new URL(href, response.url);
+      // The library still publishes some internal links with http or without /vi.
+      if (source.adapter === 'library' && source.hosts.includes(resolved.hostname)) {
+        if (resolved.protocol === 'http:') resolved.protocol = 'https:';
+        if (/^\/node\/\d+\/?$/u.test(resolved.pathname))
+          resolved.pathname = `/vi${resolved.pathname}`;
+        resolved.pathname = resolved.pathname.replace(/\/$/u, '');
+        if (kind === 'html') {
+          const page = resolved.searchParams.get('page');
+          const tab = resolved.searchParams.get('qt-s_n_ph_m_d_ch_v_');
+          resolved.search = '';
+          if (libraryListing && /^\d+(?:,\d+)*$/u.test(page ?? '')) {
+            const pages = page!.split(',').map(Number);
+            if (pages.some((value) => value > 0))
+              resolved.searchParams.set('page', pages.join(','));
+          }
+          if (libraryListing && /^\d+$/u.test(tab ?? '') && Number(tab) > 0)
+            resolved.searchParams.set('qt-s_n_ph_m_d_ch_v_', String(Number(tab)));
+        }
+      }
+      const url = allowedUrl(resolved.href, source.hosts).href;
       if (url !== response.url)
         targets.push({ url, parentUrl: listing ? null : response.url, kind, title });
     } catch {
       /* External, private or unsupported targets remain outside this crawl. */
     }
   };
-  if (listing) {
+  if (listing && source.adapter === 'ctt') {
     content
       .find('a.contentTitle')
       .each((_index, element) =>
@@ -79,6 +108,20 @@ export function htmlContent(
       });
     if (next) add($(next).attr('href'), 'html');
   }
+  if (libraryListing) {
+    content.find('a[href]').each((_index, element) => {
+      const href = $(element).attr('href');
+      if (!href) return;
+      try {
+        const url = new URL(href, response.url);
+        // Follow category tabs and every pager link; the engine deduplicates URLs.
+        if (/^\/(?:vi\/)?(?:sanpham_dichvu|page-tr-gi-p)\/?$/u.test(url.pathname))
+          add(href, 'html', normalize($(element).text()));
+      } catch {
+        /* Invalid category URLs cannot extend the crawl. */
+      }
+    });
+  }
   const attachmentRegion =
     source.adapter === 'sdh' ? content.add('#MainContent_ctl00_ctl00_dgAttach') : content;
   attachmentRegion.find('a[href]').each((_index, element) => {
@@ -95,7 +138,7 @@ export function htmlContent(
           /\/DisplayWeb\/DisplayBaiViet$/iu.test(url.pathname) && url.searchParams.has('baiviet'),
         hust: /^\/vi\/.+\.html$/iu.test(url.pathname),
         sdh: /\/Default\.aspx$/iu.test(url.pathname) && url.searchParams.has('nid'),
-        library: /^\/vi\/node\/\d+\/?$/u.test(url.pathname),
+        library: /^\/(?:vi\/)?node\/\d+\/?$/u.test(url.pathname),
       }[source.adapter];
       if (article) add(href, 'html', normalize($(element).text()));
     } catch {
@@ -129,8 +172,10 @@ export function htmlContent(
   content.find('script,style,form,nav,footer,iframe,noscript').remove();
   content.find('br').replaceWith('\n');
   content.find('img').each((_index, element) => {
+    const node = $(element);
+    const source = node.attr('src') || '';
     $(element).replaceWith(
-      `\n[Hình ảnh: ${$(element).attr('alt') || $(element).attr('src') || ''}]\n`,
+      `\n[Hình ảnh: ${node.attr('alt') || (/^data:/iu.test(source) ? 'Ảnh nhúng trong HTML; cần OCR' : source)}]\n`,
     );
   });
   const blocks: Block[] = [];
@@ -194,8 +239,18 @@ export function htmlContent(
   if (!blocks.length && normalize(content.text()))
     blocks.push({ id: '0', type: 'paragraph', text: normalize(content.text()) });
   const fullText = blocks.map((block) => block.text).join('\n\n');
+  if (libraryListing && !targets.length)
+    throw new CrawlError(
+      'EMPTY_LISTING',
+      'Danh mục thư viện không có link bài hoặc phân trang; cần kiểm tra bố cục',
+    );
   if (/oops.{0,20}page|page.{0,10}not found|404 - file/iu.test(title))
     throw new CrawlError('SOFT_404', 'Trang lỗi, không lưu làm tài liệu');
+  if (/^Nội dung này đang được cập nhật[.!]?$/iu.test(fullText))
+    throw new CrawlError(
+      'SOURCE_PENDING',
+      'Website nguồn chưa cung cấp nội dung: đang được cập nhật',
+    );
   const pointer =
     !listing && targets.some((target) => target.kind === 'pdf') && fullText.length < 700;
   if (!listing && !pointer && fullText.length < 80)
@@ -259,7 +314,7 @@ export function makeDocument(
   const extractorVersion =
     response.mime === 'application/pdf' || target.kind === 'pdf'
       ? 'pdfjs-text-v2'
-      : `${source.adapter}-html-v2`;
+      : `${source.adapter}-html-v${source.adapter === 'library' ? 3 : 2}`;
   const metadata: CrawlDocument['metadata'] = {
     language: 'vi',
     publishedAt: null,
@@ -289,6 +344,9 @@ export function makeDocument(
     firstSeenAt: response.fetchedAt,
     quality,
     warnings: [
+      ...(blocks.some((block) => block.text.includes('Ảnh nhúng trong HTML; cần OCR'))
+        ? ['Chưa đọc chữ trong ảnh nhúng HTML; cần OCR hoặc đối chiếu bản gốc.']
+        : []),
       ...blocks
         .filter((block) => block.type === 'pdf_page' && !block.text.trim())
         .map((block) => `Trang PDF ${block.page} không có chữ trích xuất được; có thể cần OCR.`),

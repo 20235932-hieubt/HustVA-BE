@@ -35,10 +35,16 @@ export const sources: Source[] = [
   {
     id: 'library',
     name: 'Thư viện — quy định & dịch vụ',
-    description: 'Quy trình phòng đọc và mượn nội bộ. Tuân thủ khoảng cách ít nhất 10 giây.',
+    description:
+      'Duyệt danh mục dịch vụ, trợ giúp và phân trang; lấy nội quy, giờ mở cửa, thẻ, mượn trả, gia hạn, biểu mẫu và PDF. Cách mỗi lần tải ít nhất 10 giây.',
     adapter: 'library',
     hosts: ['library.hust.edu.vn'],
-    seeds: ['https://library.hust.edu.vn/vi/node/471', 'https://library.hust.edu.vn/vi/node/1300'],
+    seeds: [
+      'https://library.hust.edu.vn/vi/sanpham_dichvu',
+      'https://library.hust.edu.vn/vi/page-tr-gi-p',
+      'https://library.hust.edu.vn/vi/node/471',
+      'https://library.hust.edu.vn/vi/node/1300',
+    ],
   },
   {
     id: 'sdh',
