@@ -1,0 +1,139 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+type Level = 'debug' | 'info' | 'warn' | 'error' | 'silent';
+export interface TraceContext {
+  traceId?: string;
+  conversationId?: string;
+  requestId?: string;
+  runId?: string;
+}
+export interface LogFields extends TraceContext {
+  method?: string;
+  route?: string;
+  statusCode?: number;
+  durationMs?: number;
+  status?: string;
+  reasonCode?: string;
+  errorCode?: string;
+  providerStatus?: number;
+  tool?: string;
+  modelCalls?: number;
+  toolCalls?: number;
+  proposedToolCalls?: number;
+  toolRounds?: number;
+  tokens?: number;
+  historyTurns?: number;
+  evidenceCount?: number;
+  port?: number;
+}
+
+const context = new AsyncLocalStorage<TraceContext>();
+const ranks: Record<Level, number> = { debug: 10, info: 20, warn: 30, error: 40, silent: 100 };
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+const ids = new Set(['traceId', 'conversationId', 'requestId', 'runId']);
+const numbers = new Set([
+  'statusCode',
+  'durationMs',
+  'providerStatus',
+  'modelCalls',
+  'toolCalls',
+  'proposedToolCalls',
+  'toolRounds',
+  'tokens',
+  'historyTurns',
+  'evidenceCount',
+  'port',
+]);
+const statuses = new Set([
+  'answered',
+  'needs_clarification',
+  'insufficient_evidence',
+  'out_of_scope',
+  'requires_authentication',
+  'handoff',
+  'blocked',
+  'support',
+  'not_implemented',
+  'invalid_tool',
+  'invalid_arguments',
+  'empty',
+  'ok',
+]);
+
+// Only operational metadata crosses this boundary. Never accept bodies, prompts,
+// tool arguments/results, headers, URLs, error messages/stacks or arbitrary objects.
+function safeFields(fields: LogFields): Record<string, string | number> {
+  const safe: Record<string, string | number> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (ids.has(key) && typeof value === 'string' && uuid.test(value)) safe[key] = value;
+    else if (numbers.has(key) && typeof value === 'number' && Number.isFinite(value) && value >= 0)
+      safe[key] = Math.round(value);
+    else if (key === 'status' && typeof value === 'string' && statuses.has(value))
+      safe[key] = value;
+    else if (
+      (key === 'reasonCode' || key === 'errorCode') &&
+      typeof value === 'string' &&
+      /^[A-Z][A-Z0-9_-]{0,63}$/u.test(value)
+    )
+      safe[key] = value;
+    else if (
+      key === 'method' &&
+      typeof value === 'string' &&
+      /^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)$/u.test(value)
+    )
+      safe[key] = value;
+    else if (
+      key === 'route' &&
+      typeof value === 'string' &&
+      /^\/[a-zA-Z0-9/:_-]{0,120}$/u.test(value)
+    )
+      safe[key] = value;
+    else if (key === 'tool' && typeof value === 'string')
+      safe[key] = ['search_knowledge', 'read_document_section', 'submit_answer'].includes(value)
+        ? value
+        : 'unknown';
+  }
+  return safe;
+}
+
+export function withTrace<T>(fields: TraceContext, work: () => T): T {
+  return context.run({ ...context.getStore(), ...safeFields(fields) }, work);
+}
+export function addTraceContext(fields: TraceContext) {
+  const current = context.getStore();
+  if (current) Object.assign(current, safeFields(fields));
+}
+export function currentTrace(): TraceContext {
+  return { ...context.getStore() };
+}
+
+export function createLogger(options: { level?: string; write?: (line: string) => void } = {}) {
+  function log(level: Exclude<Level, 'silent'>, event: string, fields: LogFields = {}) {
+    const setting = options.level ?? process.env.LOG_LEVEL ?? 'info';
+    const threshold = Object.hasOwn(ranks, setting) ? ranks[setting as Level] : ranks.info;
+    if (ranks[level] < threshold) return;
+    const record = {
+      timestamp: new Date().toISOString(),
+      level,
+      event: /^[a-z][a-z0-9_.]{0,79}$/u.test(event) ? event : 'log.invalid_event',
+      ...safeFields({ ...context.getStore(), ...fields }),
+    };
+    try {
+      (
+        options.write ??
+        ((line) => {
+          process.stdout.write(line);
+        })
+      )(JSON.stringify(record) + '\n');
+    } catch {
+      // A failed log destination must not alter request processing or disclose raw errors.
+    }
+  }
+  return {
+    debug: (event: string, fields?: LogFields) => log('debug', event, fields),
+    info: (event: string, fields?: LogFields) => log('info', event, fields),
+    warn: (event: string, fields?: LogFields) => log('warn', event, fields),
+    error: (event: string, fields?: LogFields) => log('error', event, fields),
+  };
+}
+export const logger = createLogger();
