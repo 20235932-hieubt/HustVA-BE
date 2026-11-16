@@ -2,11 +2,18 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { createCrawlerRouter } from './crawler/routes.js';
+import { CrawlStore } from './crawler/store.js';
+import { EmbeddingService, createEmbeddingRouter } from './embedding/index.js';
+
+const crawlStore = new CrawlStore();
+/** Every saved document is queued for embedding right after the crawler stores it. */
+export const embedding = new EmbeddingService(crawlStore);
 export const app: express.Express = express();
 app.use(helmet());
 app.use(cors({ origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000' }));
 app.use(express.json({ limit: '1mb' }));
-app.use('/api/v1/crawler', createCrawlerRouter());
+app.use('/api/v1/crawler', createCrawlerRouter(crawlStore, embedding.publisher));
+app.use('/api/v1/embedding', createEmbeddingRouter(embedding));
 app.get('/api/v1/health', (_req, res) => {
   res.json({ status: 'ok', service: 'api' });
 });

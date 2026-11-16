@@ -7,10 +7,14 @@ import {
   printRunResults,
   readableDocuments,
 } from './index.js';
+import type { DocumentEventPublisher } from './index.js';
 
 export const crawlerShutdown = new AbortController();
 
-export function createCrawlerRouter(store = new CrawlStore()): express.Router {
+export function createCrawlerRouter(
+  store = new CrawlStore(),
+  publisher?: DocumentEventPublisher,
+): express.Router {
   const router = express.Router();
   router.use((req, res, next) => {
     res.set('Cache-Control', 'no-store');
@@ -74,7 +78,11 @@ export function createCrawlerRouter(store = new CrawlStore()): express.Router {
       }
       run = await store.createRun(sourceId as string);
       console.log(`Bắt đầu crawl nguồn: ${run.sourceId}`);
-      await executeRun(store, run, { log: console.log, signal: crawlerShutdown.signal });
+      await executeRun(store, run, {
+        log: console.log,
+        signal: crawlerShutdown.signal,
+        publisher,
+      });
       await store.refreshExports(run.id);
       await printRunResults(store, run);
       res.json({ run, documents: await store.documents(run.id) });

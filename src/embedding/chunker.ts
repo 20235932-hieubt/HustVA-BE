@@ -1,0 +1,226 @@
+import { hash } from '../crawler/store.js';
+import type { Block, CrawlDocument } from '../crawler/types.js';
+import type { Chunk, ChunkPayload } from './types.js';
+
+/** Sizes are in characters; about 300–600 tokens for Vietnamese with this tokenizer. */
+const TARGET = 1200;
+const MAX = 2000;
+const MIN_CHUNK = 40;
+const MAX_HEADING = 160;
+
+// Capitalised only, so a wrapped PDF line such as "điều 5 của Quy chế" is not a new article.
+const END = String.raw`(?=$|[\s.:,)\-–])`;
+const CHAPTER = new RegExp(
+  String.raw`^(?:Chương|CHƯƠNG|Mục|MỤC|Phần|PHẦN)\s+(?:[IVXLC]+|\d+)${END}`,
+  'u',
+);
+const ARTICLE = new RegExp(String.raw`^(?:Điều|ĐIỀU)\s+\d+[a-zđ]?${END}`, 'u');
+/** Appendices follow the last article; they must not inherit its heading. */
+const APPENDIX = /^(?:PHỤ LỤC|Phụ lục)(?=$|[\s.:\-–])/u;
+
+/** "Điều 2. Quyết định này có hiệu lực kể từ ngày ký. Các …" → "Điều 2. Quyết định này có hiệu lực kể từ ngày ký" */
+const articleTitle = (line: string): string => {
+  const [, number = line, rest = ''] = /^(\S+\s+\S+?[.:]?)\s*(.*)$/u.exec(line) ?? [];
+  const title = rest
+    .split(/(?<=[^\d])[.:;]\s/u)[0]
+    .slice(0, 100)
+    .trim();
+  return title ? `${number} ${title}` : number;
+};
+const CLAUSE = /^\d{1,2}\.\s/u;
+
+export const uuidFromHash = (value: string): string => {
+  const hex = hash(value);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+};
+
+function payloadOf(document: CrawlDocument): ChunkPayload {
+  return {
+    documentId: document.documentId,
+    versionId: document.versionId,
+    sourceId: document.sourceId,
+    url: document.url,
+    parentUrl: document.parentUrl,
+    title: document.title,
+    mimeType: document.mimeType,
+    quality: document.quality,
+    issuedAt: document.metadata.issuedAt,
+    academicYear: document.metadata.academicYear,
+    cohorts: document.metadata.cohorts,
+    validityStatus: document.metadata.validityStatus,
+  };
+}
+
+/** Splits one over-long line at sentence ends, then at spaces. */
+function splitLongLine(line: string): string[] {
+  const pieces: string[] = [];
+  let current = '';
+  for (const sentence of line.split(/(?<=[.!?;:])\s+/u)) {
+    let rest = sentence;
+    while (rest.length > MAX) {
+      const cut = rest.lastIndexOf(' ', MAX);
+      const at = cut > MAX / 2 ? cut : MAX;
+      if (current) pieces.push(current);
+      current = '';
+      pieces.push(rest.slice(0, at).trim());
+      rest = rest.slice(at).trim();
+    }
+    if (current && current.length + rest.length + 1 > TARGET) {
+      pieces.push(current);
+      current = rest;
+    } else current = current ? `${current} ${rest}` : rest;
+  }
+  if (current) pieces.push(current);
+  return pieces.filter(Boolean);
+}
+
+function tableRows(block: Block): string[] {
+  const rows = block.rows?.length ? block.rows : block.text.split('\n').map((line) => [line]);
+  return rows.map((row) => row.join(' | ').trim()).filter(Boolean);
+}
+
+/**
+ * Cuts a document along its structure: a new chunk starts at each heading, Chương/Mục and Điều.
+ * Long articles break at a Khoản ("1. ", "2. ") once the chunk is big enough. Tables are kept
+ * whole, or split by rows with the header row repeated.
+ */
+export function chunkDocument(document: CrawlDocument): Omit<Chunk, 'embedText'>[] {
+  const payload = payloadOf(document);
+  const chunks: Omit<Chunk, 'embedText' | 'id' | 'index'>[] = [];
+  let section: string | null = null;
+  let chapter: string | null = null;
+  let article: string | null = null;
+  /** After a bare "Chương II" line, the next upper-case line is the chapter name. */
+  let chapterNameNext = false;
+  let text = '';
+  let pageStart: number | null = null;
+  let pageEnd: number | null = null;
+
+  const headings = (): string[] =>
+    [section, chapter, article].filter((value): value is string => Boolean(value));
+  const flush = (): void => {
+    if (text.trim().length >= MIN_CHUNK)
+      chunks.push({
+        kind: 'text',
+        headings: headings(),
+        pageStart,
+        pageEnd,
+        text: text.trim(),
+        payload,
+      });
+    text = '';
+    pageStart = null;
+    pageEnd = null;
+  };
+  const append = (piece: string, page: number | null, separator: string): void => {
+    if (text && text.length + piece.length + separator.length > TARGET) flush();
+    text = text ? `${text}${separator}${piece}` : piece;
+    if (page !== null) {
+      pageStart ??= page;
+      pageEnd = page;
+    }
+  };
+  const line = (raw: string, page: number | null, separator: string): void => {
+    const value = raw.trim();
+    if (!value) return;
+    const chapterName = chapterNameNext;
+    chapterNameNext = false;
+    if (
+      chapterName &&
+      value === value.toUpperCase() &&
+      /\p{L}/u.test(value) &&
+      !ARTICLE.test(value) &&
+      `${chapter}. ${value}`.length <= MAX_HEADING
+    ) {
+      chapter = `${chapter}. ${value}`;
+      return;
+    }
+    if (APPENDIX.test(value) && value.length <= MAX_HEADING) {
+      flush();
+      chapter = value;
+      article = null;
+      chapterNameNext = true;
+      return;
+    }
+    if (CHAPTER.test(value) && value.length <= MAX_HEADING) {
+      flush();
+      chapter = value;
+      article = null;
+      chapterNameNext = !/\s\p{L}{2,}/u.test(value.replace(CHAPTER, ''));
+      return;
+    }
+    if (ARTICLE.test(value)) {
+      flush();
+      article = articleTitle(value);
+      if (value.length <= MAX_HEADING && article === value) return; // Line is only the title.
+    } else if (CLAUSE.test(value) && text.length >= TARGET * 0.6) flush();
+    for (const piece of value.length > MAX ? splitLongLine(value) : [value])
+      append(piece, page, separator);
+  };
+
+  for (const block of document.blocks) {
+    const page = block.page ?? null;
+    const value = block.text.normalize('NFC').trim();
+    if (!value && block.type !== 'table') continue;
+    if (block.type === 'heading') {
+      flush();
+      if (CHAPTER.test(value)) {
+        chapter = value.slice(0, MAX_HEADING);
+        article = null;
+      } else if (ARTICLE.test(value)) article = articleTitle(value);
+      else {
+        section = value.slice(0, MAX_HEADING);
+        chapter = null;
+        article = null;
+      }
+      continue;
+    }
+    if (block.type === 'table') {
+      flush();
+      const rows = tableRows(block);
+      const header = rows.length > 1 ? rows[0] : null;
+      let group: string[] = [];
+      const emit = (): void => {
+        const body = (header && group[0] !== header ? [header, ...group] : group).join('\n');
+        if (body.length >= MIN_CHUNK)
+          chunks.push({
+            kind: 'table',
+            headings: headings(),
+            pageStart: page,
+            pageEnd: page,
+            text: body,
+            payload,
+          });
+        group = [];
+      };
+      if (rows.join('\n').length <= MAX) group = rows;
+      else
+        for (const row of header ? rows.slice(1) : rows) {
+          if (group.length && [header, ...group, row].join('\n').length > TARGET) emit();
+          group.push(row);
+        }
+      emit();
+      continue;
+    }
+    // Paragraphs are separated by a blank line; lines inside a block or PDF page by a newline.
+    value.split('\n').forEach((raw, index) => line(raw, page, index === 0 ? '\n\n' : '\n'));
+  }
+  flush();
+
+  return chunks.map((chunk, index) => ({
+    ...chunk,
+    index,
+    id: uuidFromHash(`${document.documentId}:${document.versionId}:${index}`),
+  }));
+}
+
+export function embedTextOf(chunk: Pick<Chunk, 'text' | 'headings' | 'payload'>): string {
+  return [chunk.payload.title, chunk.headings.join(' › '), '', chunk.text]
+    .filter((part, index) => part || index === 2)
+    .join('\n')
+    .trim();
+}
+
+export function buildChunks(document: CrawlDocument): Chunk[] {
+  return chunkDocument(document).map((chunk) => ({ ...chunk, embedText: embedTextOf(chunk) }));
+}
