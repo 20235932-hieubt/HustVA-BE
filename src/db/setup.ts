@@ -28,6 +28,8 @@ export function vectorDefinition(config: MongoConfig): { fields: VectorField[] }
       },
       { type: 'filter', path: 'sourceId' },
       { type: 'filter', path: 'indexVersion' },
+      // Chunks for the asker's cohort plus general rules; see embedding/mongo-store.ts.
+      { type: 'filter', path: 'cohortScope' },
     ],
   };
 }

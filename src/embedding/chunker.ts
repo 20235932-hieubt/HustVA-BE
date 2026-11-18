@@ -29,6 +29,15 @@ const articleTitle = (line: string): string => {
 };
 const CLAUSE = /^\d{1,2}\.\s/u;
 
+/**
+ * Inline images (`data:image/png;base64,...`) sometimes end up in extracted HTML text. They carry
+ * no meaning for search and would otherwise fill dozens of chunks with base64 noise.
+ */
+const DATA_URI = /data:[\w.+-]+\/[\w.+-]+;base64,[A-Za-z0-9+/=\s]+/gu;
+const BASE64_RUN = /[A-Za-z0-9+/]{200,}={0,2}/gu;
+export const stripEmbeddedData = (text: string): string =>
+  text.replace(DATA_URI, ' ').replace(BASE64_RUN, ' ');
+
 export const uuidFromHash = (value: string): string => {
   const hex = hash(value);
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
@@ -160,7 +169,7 @@ export function chunkDocument(document: CrawlDocument): Omit<Chunk, 'embedText'>
 
   for (const block of document.blocks) {
     const page = block.page ?? null;
-    const value = block.text.normalize('NFC').trim();
+    const value = stripEmbeddedData(block.text.normalize('NFC')).trim();
     if (!value && block.type !== 'table') continue;
     if (block.type === 'heading') {
       flush();

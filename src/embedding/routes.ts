@@ -30,6 +30,7 @@ export function createEmbeddingRouter(service: EmbeddingService): express.Router
       serviceError = (error as Error).message;
     }
     res.json({
+      store: service.vectors.name,
       model,
       serviceError,
       queue: { waiting: service.queue.size, processing: service.queue.current },

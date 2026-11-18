@@ -2,6 +2,7 @@ import { readdir, readFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { atomicJson, checkKey } from '../crawler/store.js';
 import type {
+  Chunk,
   IndexState,
   IndexStateStore,
   SearchFilter,
@@ -47,6 +48,7 @@ const matches = (chunk: Pick<StoredChunk, 'payload'>, filter: SearchFilter = {})
  * Swap for Qdrant behind the same VectorStore interface when the data grows.
  */
 export class LocalVectorStore implements VectorStore {
+  readonly name = 'local';
   private cache: Map<string, VectorFile> | null = null;
   constructor(private readonly directory: string) {}
   private file(documentId: string): string {
@@ -78,6 +80,16 @@ export class LocalVectorStore implements VectorStore {
       if (error.code !== 'ENOENT') throw error;
     });
     this.cache?.delete(documentId);
+  }
+  async getChunks(documentId: string, embeddingModel: string): Promise<Chunk[] | null> {
+    const entry = (await this.load()).get(documentId);
+    if (!entry || entry.embeddingModel !== embeddingModel) return null;
+    return entry.chunks
+      .map(({ vector: _vector, ...chunk }) => {
+        void _vector;
+        return chunk;
+      })
+      .sort((a, b) => a.index - b.index);
   }
   async search(
     vector: number[],

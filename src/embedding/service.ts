@@ -2,10 +2,13 @@ import type { CrawlStore } from '../crawler/store.js';
 import type { DocumentEventPublisher } from '../crawler/types.js';
 import { embeddingConfig } from './config.js';
 import { EmbedderUnavailableError, HttpEmbedder } from './embedder.js';
+import { createMongoConnection } from '../db/client.js';
+import { readMongoConfig } from '../db/config.js';
 import { LocalIndexStateStore, LocalVectorStore } from './local-store.js';
+import { MongoVectorStore } from './mongo-store.js';
 import { IngestionPipeline, LocalEventQueue } from './pipeline.js';
 import { CrawlStoreReader } from './reader.js';
-import type { Embedder, IndexStateStore } from './types.js';
+import type { Embedder, IndexStateStore, VectorStore } from './types.js';
 
 /** Wires the MVP pieces together. Swap the reader, vector store or queue here, not in callers. */
 export class EmbeddingService {
@@ -13,8 +16,10 @@ export class EmbeddingService {
   readonly queue: LocalEventQueue;
   readonly states: IndexStateStore;
   readonly embedder: Embedder;
+  readonly vectors: VectorStore;
   lastReconcile: { at: string; queued: number; error: string | null } | null = null;
   private timer: NodeJS.Timeout | null = null;
+  private mongo: ReturnType<typeof createMongoConnection> | null = null;
 
   constructor(
     crawlStore: CrawlStore,
@@ -23,16 +28,30 @@ export class EmbeddingService {
   ) {
     this.embedder = new HttpEmbedder(config.serviceUrl, config.requestTimeoutMs);
     this.states = new LocalIndexStateStore(config.dataDir);
+    this.vectors =
+      config.store === 'atlas' ? this.atlasStore() : new LocalVectorStore(config.dataDir);
     this.pipeline = new IngestionPipeline({
       reader: new CrawlStoreReader(crawlStore),
       embedder: this.embedder,
-      vectors: new LocalVectorStore(config.dataDir),
+      vectors: this.vectors,
       states: this.states,
       batchSize: config.batchSize,
       maxAttempts: config.maxAttempts,
       log,
     });
     this.queue = new LocalEventQueue(this.pipeline, log);
+  }
+
+  /** The driver connects on first use, so a missing network only fails (and retries) jobs. */
+  private atlasStore(): VectorStore {
+    const mongo = readMongoConfig();
+    if (!mongo.embeddingDimension)
+      throw new Error('EMBEDDING_STORE=atlas cần EMBEDDING_DIMENSION (768 với mô hình hiện tại).');
+    this.mongo = createMongoConnection(mongo);
+    return new MongoVectorStore(this.mongo.db, {
+      vectorIndex: mongo.vectorIndexName,
+      dimension: mongo.embeddingDimension,
+    });
   }
 
   /** Given to the crawler. A no-op when embedding is turned off. */
@@ -74,5 +93,7 @@ export class EmbeddingService {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     await this.queue.stop();
+    await this.mongo?.client.close();
+    this.mongo = null;
   }
 }
