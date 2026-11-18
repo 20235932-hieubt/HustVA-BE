@@ -19,14 +19,14 @@ export interface Retriever {
 export interface RagConfig {
   /** Hits below this cosine score are treated as unrelated. */
   minScore: number;
-  /** Characters of passage text sent to the model per tool call (graph caps tool output at 8000). */
-  textBudget: number;
+  /** Serialized evidence per tool call; the graph rejects tool output above 8000 characters. */
+  outputBudget: number;
 }
 export function readRagConfig(env: NodeJS.ProcessEnv = process.env): RagConfig {
   const minScore = Number(env.RAG_MIN_SCORE ?? 0.45);
   return {
     minScore: Number.isFinite(minScore) && minScore >= 0 && minScore < 1 ? minScore : 0.45,
-    textBudget: 5000,
+    outputBudget: 7600,
   };
 }
 
@@ -64,13 +64,14 @@ export class RagKnowledge implements KnowledgePort {
     if (this.refs.size > MAX_REFS) this.refs.delete(this.refs.keys().next().value!);
   }
 
+  /** Whole passages in the given order: cutting one could remove the sentence that answers. */
   private evidence(chunks: { chunk: Chunk; score?: number }[]): Evidence[] {
-    const each = Math.floor(this.config.textBudget / Math.max(chunks.length, 1));
-    return chunks.map(({ chunk, score }) => {
-      this.remember(chunk);
-      return {
+    const picked: Evidence[] = [];
+    let room = this.config.outputBudget;
+    for (const { chunk, score } of chunks) {
+      const item: Evidence = {
         id: chunk.id,
-        text: chunk.text.length > each ? `${chunk.text.slice(0, each - 1)}…` : chunk.text,
+        text: chunk.text,
         isMock: false,
         title: chunk.payload.title,
         url: chunk.payload.url,
@@ -80,7 +81,13 @@ export class RagKnowledge implements KnowledgePort {
         quality: chunk.payload.quality,
         score: score === undefined ? undefined : Number(score.toFixed(3)),
       };
-    });
+      const size = JSON.stringify(item).length + 1;
+      if (size > room) break;
+      room -= size;
+      this.remember(chunk);
+      picked.push(item);
+    }
+    return picked;
   }
 
   private result(evidence: Evidence[]): KnowledgeResult {
@@ -138,9 +145,8 @@ export class RagKnowledge implements KnowledgePort {
         evidence: [],
         warnings: ['Tài liệu đã được cập nhật; hãy tìm kiếm lại.'],
       };
-    // The passage plus its neighbours: the clause before and after usually completes the rule.
-    return this.result(
-      this.evidence(chunks.slice(Math.max(0, at - 1), at + 2).map((chunk) => ({ chunk }))),
-    );
+    // The passage first, then its neighbours, which usually complete the rule.
+    const passages = [chunks[at], chunks[at - 1], chunks[at + 1]].filter(Boolean);
+    return this.result(this.evidence(passages.map((chunk) => ({ chunk }))));
   }
 }

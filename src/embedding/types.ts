@@ -43,7 +43,7 @@ export interface Chunk {
   pageEnd: number | null;
   /** Text shown to the user and the LLM. */
   text: string;
-  /** Text sent to the model: title and headings prepended for context. */
+  /** Text sent to the embedding model: the passage with context such as the document title. */
   embedText: string;
   payload: ChunkPayload;
 }

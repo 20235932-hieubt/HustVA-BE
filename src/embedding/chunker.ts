@@ -2,7 +2,11 @@ import { hash } from '../crawler/store.js';
 import type { Block, CrawlDocument } from '../crawler/types.js';
 import type { Chunk, ChunkPayload } from './types.js';
 
-/** Sizes are in characters; about 300–600 tokens for Vietnamese with this tokenizer. */
+/** Production chunks: about 512 tokens with 15% overlap, the best retrieval result among the strategies compared. */
+export const WINDOW_SIZE = 1750;
+export const WINDOW_OVERLAP = 260;
+
+/** Structure chunking (by heading and article), kept for comparison. Sizes are in characters. */
 const TARGET = 1200;
 const MAX = 2000;
 const MIN_CHUNK = 40;
@@ -35,7 +39,7 @@ const CLAUSE = /^\d{1,2}\.\s/u;
  */
 const DATA_URI = /data:[\w.+-]+\/[\w.+-]+;base64,[A-Za-z0-9+/=\s]+/gu;
 const BASE64_RUN = /[A-Za-z0-9+/]{200,}={0,2}/gu;
-export const stripEmbeddedData = (text: string): string =>
+const stripEmbeddedData = (text: string): string =>
   text.replace(DATA_URI, ' ').replace(BASE64_RUN, ' ');
 
 export const uuidFromHash = (value: string): string => {
@@ -230,6 +234,122 @@ export function embedTextOf(chunk: Pick<Chunk, 'text' | 'headings' | 'payload'>)
     .trim();
 }
 
+interface OutlineMark {
+  offset: number;
+  page: number | null;
+  section: string | null;
+  chapter: string | null;
+  article: string | null;
+}
+
+/** The document as one string, with where each page and heading starts in it. */
+function outlineOf(document: CrawlDocument): { text: string; marks: OutlineMark[] } {
+  const parts: string[] = [];
+  const marks: OutlineMark[] = [];
+  let offset = 0;
+  let section: string | null = null;
+  let chapter: string | null = null;
+  let article: string | null = null;
+  for (const block of document.blocks) {
+    const value = stripEmbeddedData(block.text.normalize('NFC')).trim();
+    if (!value) continue;
+    if (parts.length) offset += 1; // The newline that joins the parts.
+    const page = block.page ?? null;
+    const mark = (at: number): void => {
+      marks.push({ offset: at, page, section, chapter, article });
+    };
+    if (block.type === 'heading') {
+      if (CHAPTER.test(value)) {
+        chapter = value.slice(0, MAX_HEADING);
+        article = null;
+      } else if (ARTICLE.test(value)) article = articleTitle(value);
+      else {
+        section = value.slice(0, MAX_HEADING);
+        chapter = null;
+        article = null;
+      }
+    }
+    mark(offset);
+    if (block.type !== 'heading') {
+      let lineStart = offset;
+      for (const raw of value.split('\n')) {
+        const line = raw.trim();
+        if (CHAPTER.test(line) && line.length <= MAX_HEADING) {
+          chapter = line;
+          article = null;
+          mark(lineStart);
+        } else if (ARTICLE.test(line)) {
+          article = articleTitle(line);
+          mark(lineStart);
+        }
+        lineStart += raw.length + 1;
+      }
+    }
+    parts.push(value);
+    offset += value.length;
+  }
+  return { text: parts.join('\n'), marks };
+}
+
+const articleNumber = (title: string): string => ARTICLE.exec(title)?.[0] ?? title;
+
+/**
+ * Sliding window over the whole document, cut at a space. Headings and pages only locate the
+ * passage for citations; the embedded text is the document title plus the passage.
+ */
+export function windowChunks(
+  document: CrawlDocument,
+  size = WINDOW_SIZE,
+  overlap = WINDOW_OVERLAP,
+): Chunk[] {
+  const payload = payloadOf(document);
+  const { text, marks } = outlineOf(document);
+  const markAt = (offset: number): OutlineMark | undefined =>
+    marks.filter((mark) => mark.offset <= offset).at(-1);
+  const chunks: Chunk[] = [];
+  for (let start = 0; start < text.length;) {
+    let end = Math.min(text.length, start + size);
+    if (end < text.length) {
+      const space = text.lastIndexOf(' ', end);
+      if (space > start + size / 2) end = space;
+    }
+    const raw = text.slice(start, end);
+    const piece = raw.trim();
+    if (piece.length >= MIN_CHUNK) {
+      const from = start + raw.length - raw.trimStart().length;
+      const to = from + piece.length;
+      const first = markAt(from);
+      const articles = [
+        ...new Set(
+          [
+            first?.article,
+            ...marks.filter((m) => m.offset > from && m.offset < to).map((m) => m.article),
+          ].filter((value): value is string => Boolean(value)),
+        ),
+      ];
+      const article =
+        articles.length > 1 ? [...new Set(articles.map(articleNumber))].join(', ') : articles[0];
+      const index = chunks.length;
+      chunks.push({
+        id: uuidFromHash(`${document.documentId}:${document.versionId}:${index}`),
+        index,
+        kind: 'text',
+        headings: [first?.section, first?.chapter, article].filter((value): value is string =>
+          Boolean(value),
+        ),
+        pageStart: first?.page ?? null,
+        pageEnd: markAt(to - 1)?.page ?? null,
+        text: piece,
+        embedText: `${document.title}\n\n${piece}`,
+        payload,
+      });
+    }
+    if (end >= text.length) break;
+    start = Math.max(end - overlap, start + 1);
+  }
+  return chunks;
+}
+
 export function buildChunks(document: CrawlDocument): Chunk[] {
-  return chunkDocument(document).map((chunk) => ({ ...chunk, embedText: embedTextOf(chunk) }));
+  return windowChunks(document);
 }
