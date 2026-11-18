@@ -62,6 +62,8 @@ export interface SearchHit {
 }
 /** Local JSON files today; Qdrant later. */
 export interface VectorStore {
+  /** Recorded in the index state, so switching stores re-embeds everything into the new one. */
+  readonly name: string;
   replaceDocument(
     documentId: string,
     embeddingModel: string,
@@ -69,6 +71,8 @@ export interface VectorStore {
     chunks: StoredChunk[],
   ): Promise<void>;
   deleteDocument(documentId: string): Promise<void>;
+  /** Chunks of one document in reading order (without vectors), or null when not indexed. */
+  getChunks(documentId: string, embeddingModel: string): Promise<Chunk[] | null>;
   search(
     vector: number[],
     embeddingModel: string,
@@ -83,6 +87,8 @@ export interface IndexState {
   status: IndexStatus;
   embeddingModel: string | null;
   chunkerVersion: string;
+  /** Vector store the chunks were written to; missing on states written before 'atlas' existed. */
+  store?: string;
   chunkCount: number;
   /** Failed attempts for this versionId; reset when the content changes. */
   attempts: number;

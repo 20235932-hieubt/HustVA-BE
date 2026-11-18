@@ -1,0 +1,119 @@
+{
+  "description": "Câu hỏi mẫu để đo retrieval. Một câu được tính là tìm đúng khi một đoạn trong top-k chứa ít nhất một chuỗi trong 'answers' (so khớp bỏ khoảng trắng, không phân biệt hoa thường). Câu hỏi cố ý diễn đạt khác văn bản. Nhóm nên rà lại và bổ sung.",
+  "questions": [
+    {
+      "id": "qc-tc-max",
+      "question": "Một học kỳ chính em được đăng ký nhiều nhất bao nhiêu tín chỉ?",
+      "answers": ["tối đa 24 TC"]
+    },
+    {
+      "id": "qc-tc-he",
+      "question": "Kỳ hè được học tối đa mấy tín?",
+      "answers": ["tối đa 8 TC trong học kỳ hè"]
+    },
+    {
+      "id": "qc-canh-bao-tc",
+      "question": "Đang bị cảnh báo học tập thì kỳ sau đăng ký được bao nhiêu tín chỉ?",
+      "answers": ["tối đa 14 TC và tối thiểu 8 TC"]
+    },
+    {
+      "id": "qc-buoc-thoi-hoc",
+      "question": "Trường hợp nào sinh viên bị đuổi học vì kết quả kém?",
+      "answers": ["cảnh báo học tập mức 3 lần thứ hai liên tiếp"]
+    },
+    {
+      "id": "qc-canh-bao-3",
+      "question": "Nợ bao nhiêu tín thì bị cảnh báo mức 3?",
+      "answers": ["nợ đọng từ đầu khóa lớn hơn 24"]
+    },
+    {
+      "id": "qc-thoi-gian-toi-da",
+      "question": "Em được phép học ở trường lâu nhất là bao nhiêu năm?",
+      "answers": ["không quá 2 lần thời gian theo kế hoạch học tập chuẩn"]
+    },
+    {
+      "id": "qc-diem-dat-datn",
+      "question": "Đồ án tốt nghiệp phải được điểm gì mới qua?",
+      "answers": ["phải từ C trở lên"]
+    },
+    {
+      "id": "qc-diem-danh",
+      "question": "Nghỉ học trên lớp nhiều buổi có bị trừ điểm không?",
+      "answers": ["kết quả điểm danh có thể được sử dụng để cộng/trừ"]
+    },
+    {
+      "id": "qc-thoi-hoc-hoc-phi",
+      "question": "Xin nghỉ học giữa chừng ở đầu kỳ thì có phải đóng học phí không?",
+      "answers": ["phải đóng một nửa (50%) học phí"]
+    },
+    {
+      "id": "qc-hoc-ky",
+      "question": "Một năm học ở Bách khoa chia làm mấy kỳ?",
+      "answers": ["hai học kỳ chính và một học kỳ hè"]
+    },
+    {
+      "id": "qc-ha-hang",
+      "question": "Phải học lại nhiều môn thì có bị giảm loại bằng không?",
+      "answers": ["vượt quá 5% của tổng số TC"]
+    },
+    {
+      "id": "qc-nghi-tam-thoi",
+      "question": "Bảo lưu kết quả học tập là nghỉ bao lâu?",
+      "answers": ["có hiệu lực từ 01 học kỳ trở lên"]
+    },
+    {
+      "id": "tt-ban-sao-bang",
+      "question": "Em làm mất bằng đại học, muốn xin cấp lại bản sao thì cần chuẩn bị gì?",
+      "answers": ["giấy tường trình việc mất bằng"]
+    },
+    {
+      "id": "tt-dinh-chinh-diem",
+      "question": "Thầy cô nhập nhầm điểm thi thì sửa thế nào?",
+      "answers": ["vào điểm sai"]
+    },
+    {
+      "id": "tt-dieu-kien-tn",
+      "question": "Làm sao tự kiểm tra xem mình đã đủ điều kiện ra trường chưa?",
+      "answers": ["sử dụng chức năng Kiểm tra điều k"]
+    },
+    {
+      "id": "tb-the-sv",
+      "question": "Không đeo thẻ sinh viên có bị cấm vào trường không?",
+      "answers": ["không cho sinh viên không đeo thẻ sinh viên vào khuôn viên trường"]
+    },
+    {
+      "id": "tb-tiet-1",
+      "question": "Tiết đầu tiên buổi sáng bắt đầu lúc mấy giờ?",
+      "answers": ["Tiết 1: 6h45"]
+    },
+    {
+      "id": "tb-kham-sk",
+      "question": "Khám sức khỏe đầu khóa K66 hết bao nhiêu tiền?",
+      "answers": ["320.000 đ/sinh viên"]
+    },
+    {
+      "id": "tb-seb",
+      "question": "Thi trắc nghiệm trên máy tính ở nhà thì cần cài phần mềm gì?",
+      "answers": ["Safe Exam Browser"]
+    },
+    {
+      "id": "hp-thac-si",
+      "question": "Học thạc sĩ ngành kỹ thuật năm 2026-2027 mỗi tín chỉ bao nhiêu tiền?",
+      "answers": ["790.000 đồng/TCHP"]
+    },
+    {
+      "id": "hp-hoc-lai",
+      "question": "Đóng tiền học lại một môn được tính theo mức nào?",
+      "answers": [
+        "học phí các học phần học lại",
+        "Mức học phí các học phần học lại",
+        "học phần học lại; học phần học cải thiện"
+      ]
+    },
+    {
+      "id": "nn-han-chung-chi",
+      "question": "Bằng IELTS thi lâu rồi thì còn dùng xét chuẩn đầu ra được không?",
+      "answers": ["được cấp trong vòng 2 năm", "cấp trong vòng 02 năm", "trong vòng 2 năm tính đến"]
+    }
+  ]
+}

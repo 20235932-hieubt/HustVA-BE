@@ -2,6 +2,7 @@ import { CHUNKER_VERSION } from './config.js';
 import { buildChunks } from './chunker.js';
 import { EmbedderUnavailableError } from './embedder.js';
 import type {
+  Chunk,
   DocumentReader,
   DocumentSavedEvent,
   Embedder,
@@ -37,7 +38,12 @@ export class IngestionPipeline {
   }
 
   private upToDate(state: IndexState | null, versionId: string, model: string): boolean {
-    if (!state || state.versionId !== versionId || state.chunkerVersion !== CHUNKER_VERSION)
+    if (
+      !state ||
+      state.versionId !== versionId ||
+      state.chunkerVersion !== CHUNKER_VERSION ||
+      (state.store ?? 'local') !== this.deps.vectors.name
+    )
       return false;
     return (
       state.status === 'skipped' || (state.status === 'indexed' && state.embeddingModel === model)
@@ -53,6 +59,7 @@ export class IngestionPipeline {
       documentId,
       versionId: document.versionId,
       chunkerVersion: CHUNKER_VERSION,
+      store: this.deps.vectors.name,
       attempts:
         previous?.versionId === document.versionId && previous.status === 'failed'
           ? previous.attempts
@@ -137,6 +144,12 @@ export class IngestionPipeline {
     const model = await this.modelKey();
     const [vector] = await this.deps.embedder.embed([query]);
     return this.deps.vectors.search(vector, model.key, { limit, filter });
+  }
+
+  /** Chunks of an indexed document embedded with the current model, in reading order. */
+  async chunks(documentId: string): Promise<Chunk[] | null> {
+    const model = await this.modelKey();
+    return this.deps.vectors.getChunks(documentId, model.key);
   }
 }
 

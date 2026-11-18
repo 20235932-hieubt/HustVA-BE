@@ -16,7 +16,10 @@ export const embeddingConfig = {
   requestTimeoutMs: number(process.env.EMBEDDING_TIMEOUT_MS, 300_000),
   reconcileIntervalMs: number(process.env.EMBEDDING_RECONCILE_INTERVAL_MS, 5 * 60_000),
   maxAttempts: 5,
+  /** `atlas`: chunks and vectors go to MongoDB Atlas (knowledge_chunks) and search uses Atlas
+   *  Vector Search. `local`: JSON files under dataDir. Index state stays local either way. */
+  store: (process.env.EMBEDDING_STORE?.trim() === 'atlas' ? 'atlas' : 'local') as 'atlas' | 'local',
 };
 
 /** Bump when chunking changes so reconcile re-embeds every document. */
-export const CHUNKER_VERSION = 'blocks-v2';
+export const CHUNKER_VERSION = 'blocks-v4';
