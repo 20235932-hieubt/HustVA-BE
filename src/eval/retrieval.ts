@@ -16,7 +16,13 @@ import { performance } from 'node:perf_hooks';
 import { repositoryRoot } from '../crawler/config.js';
 import { CrawlStore } from '../crawler/store.js';
 import type { CrawlDocument } from '../crawler/types.js';
-import { chunkDocument, embedTextOf, stripEmbeddedData } from '../embedding/chunker.js';
+import {
+  chunkDocument,
+  embedTextOf,
+  WINDOW_OVERLAP,
+  WINDOW_SIZE,
+  windowChunks,
+} from '../embedding/chunker.js';
 import { embeddingConfig } from '../embedding/config.js';
 import { HttpEmbedder } from '../embedding/embedder.js';
 import { CrawlStoreReader } from '../embedding/reader.js';
@@ -38,35 +44,14 @@ const K = [1, 3, 5] as const;
 const norm = (text: string) => text.replace(/\s+/gu, '').normalize('NFC').toLocaleLowerCase('vi');
 const tokens = (text: string) => Math.round(text.length / CHARS_PER_TOKEN);
 
-const fullText = (doc: CrawlDocument) =>
-  doc.blocks
-    .map((block) => stripEmbeddedData(block.text.normalize('NFC')).trim())
-    .filter(Boolean)
-    .join('\n');
-
-/** Sliding window over the whole document, cut at whitespace. */
-function windows(doc: CrawlDocument, size: number, overlap: number): EvalChunk[] {
-  const text = fullText(doc);
-  const out: EvalChunk[] = [];
-  for (let start = 0; start < text.length;) {
-    let end = Math.min(text.length, start + size);
-    if (end < text.length) {
-      const space = text.lastIndexOf(' ', end);
-      if (space > start + size / 2) end = space;
-    }
-    const piece = text.slice(start, end).trim();
-    if (piece.length >= 40)
-      out.push({
-        documentId: doc.documentId,
-        title: doc.title,
-        text: piece,
-        embedText: `${doc.title}\n\n${piece}`,
-      });
-    if (end >= text.length) break;
-    start = Math.max(end - overlap, start + 1);
-  }
-  return out;
-}
+/** Sliding window over the whole document, using the production chunker. */
+const windows = (doc: CrawlDocument, size: number, overlap: number): EvalChunk[] =>
+  windowChunks(doc, size, overlap).map((chunk) => ({
+    documentId: doc.documentId,
+    title: doc.title,
+    text: chunk.text,
+    embedText: chunk.embedText,
+  }));
 
 /** Structure chunks merged while they share a chapter, up to `maxChars`. */
 function grouped(doc: CrawlDocument, maxChars: number): EvalChunk[] {
@@ -101,7 +86,7 @@ function grouped(doc: CrawlDocument, maxChars: number): EvalChunk[] {
 const strategies: Strategy[] = [
   {
     name: 'structure',
-    description: 'Hiện tại: theo Chương/Điều/Khoản ~1200 ký tự, ghép tiêu đề',
+    description: 'Cách cũ: theo Chương/Điều/Khoản ~1200 ký tự, ghép tiêu đề',
     build: (doc) =>
       chunkDocument(doc).map((chunk) => ({
         documentId: doc.documentId,
@@ -123,8 +108,8 @@ const strategies: Strategy[] = [
   },
   {
     name: 'fixed-512',
-    description: 'Cắt đều ~512 token, chồng 15%, ghép tên tài liệu',
-    build: (doc) => windows(doc, 1750, 260),
+    description: 'Đang dùng: cắt đều ~512 token, chồng 15%, ghép tên tài liệu',
+    build: (doc) => windows(doc, WINDOW_SIZE, WINDOW_OVERLAP),
   },
   {
     name: 'structure-3000',

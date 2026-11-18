@@ -87,7 +87,7 @@ crawler saveDocument ─(saved)─► publisher ─► hàng đợi ─► đọ
                                          reconcile (lúc khởi động + mỗi 5 phút) ─┘
 ```
 
-- Chunk theo cấu trúc: tiêu đề, Chương/Mục, Điều, Phụ lục; Điều dài cắt theo Khoản; bảng giữ nguyên hàng, bảng dài tách theo hàng và lặp hàng tiêu đề. Mỗi chunk giữ URL, trang PDF, tiêu đề cha, khóa (`cohorts`), nguồn.
+- Chunk theo cửa sổ khoảng 512 token (1750 ký tự), chồng lấn khoảng 15% (260 ký tự), cắt tại khoảng trắng; đoạn embed gồm tên tài liệu và nội dung. Cách này có kết quả tốt nhất trong `pnpm.cmd eval:retrieval`. Mỗi chunk giữ URL, trang PDF, Chương/Điều để trích dẫn, tiêu đề cha, khóa (`cohorts`), nguồn.
 - Không embed lại tài liệu không đổi (`versionId`). Event bị mất, service embedding đang tắt, tài liệu crawl từ trước, hay đổi mô hình/cách chunk đều được lượt reconcile bắt lại.
 - Trang chỉ dẫn tới PDF (`index_only`) được bỏ qua; nội dung nằm ở PDF đi kèm.
 

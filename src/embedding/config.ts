@@ -22,4 +22,4 @@ export const embeddingConfig = {
 };
 
 /** Bump when chunking changes so reconcile re-embeds every document. */
-export const CHUNKER_VERSION = 'blocks-v4';
+export const CHUNKER_VERSION = 'window-512-v1';
