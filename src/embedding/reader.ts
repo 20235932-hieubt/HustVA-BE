@@ -16,7 +16,8 @@ export class CrawlStoreReader implements DocumentReader {
   constructor(private readonly store: CrawlStore) {}
   async get(documentId: string): Promise<CrawlDocument | null> {
     const document = await this.store.getDocument(documentId);
-    if (!document?.parentUrl || !isGenericTitle(document.title)) return document;
+    if (!document?.parentUrl || !isGenericTitle(document.title))
+      return document;
     // Same id scheme as the crawler (crawler/extract.ts): hash of source id and URL.
     const parent = await this.store.getDocument(
       hash(`${document.sourceId}\n${document.parentUrl}`),

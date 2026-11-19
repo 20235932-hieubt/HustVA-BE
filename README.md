@@ -41,11 +41,7 @@ Frontend tương ứng đặt `NEXT_PUBLIC_API_URL=https://api.example.com/api/v
 trước khi build. Widget tải từ `https://chat.example.com/widget.js` sẽ tự tìm
 `/embed` và `/chat` trên cùng origin của frontend.
 
-Kiểm tra cấu hình bằng:
-
-```powershell
-pnpm.cmd test:http-config
-```
+Các file kiểm thử được lưu riêng ngoài repo, tại `../kiem-thu/be`.
 
 ## Crawler API
 
@@ -265,30 +261,9 @@ thể gọi `ToolManager.execute(id, args, signal?)` cho 5 tool dùng chung này
 Chưa có cơ chế xác thực sinh viên hoặc allowlist MSSV vì phạm vi hiện tại không
 đọc dữ liệu sinh viên.
 
-Kiểm thử API giả lập, không dùng dữ liệu thật:
-
-```powershell
-pnpm.cmd test:tools
-pnpm.cmd test:chat-tools
-```
-
-Test với API HUST thật (có request ra mạng, không in credentials hoặc payload):
-
-```powershell
-# Dùng 3 biến Partner đã điền trong be/.env:
-pnpm.cmd test:tools:live
-
-# Hoặc đọc credentials từ file api.env được cấp, không sửa be/.env:
-pnpm.cmd test:tools:live -- --api-env "C:\duong-dan\api.env"
-```
-
-Script khởi tạo management API tạm trên loopback với token ngẫu nhiên chỉ dùng
-trong lượt test, kiểm tra auth và gọi cả 5 tool qua HTTP. Không cần cấu hình
-`TOOL_MANAGEMENT_TOKEN` để chạy script; trang `/tools` và backend chạy bình thường
-vẫn yêu cầu token này trong môi trường. Settings thử nghiệm được tách riêng và
-xóa sau khi kết thúc; script không thay đổi settings hoặc `.env` đang dùng.
-Đầu ra chỉ gồm trạng thái, số kết quả, thời gian và mã lỗi. Lần kiểm tra API thật
-ngày 19/11/2026: cả 5 request trả HTTP 200 với `status: success`.
+Các bài kiểm thử tự động và script kiểm thử API thật đã được chuyển sang
+`../kiem-thu/be`, giữ nguyên nội dung để tham khảo hoặc khôi phục khi cần.
+Các lệnh `test:*` tương ứng đã được bỏ khỏi `package.json`.
 
 ## Trace và kiểm tra code
 
@@ -300,7 +275,7 @@ pnpm.cmd typecheck
 pnpm.cmd build
 ```
 
-Bộ test tự động và các script `test:chat`/`test:db` đã được gỡ. Có thể kiểm tra chức năng qua các endpoint Postman ở trên.
+Có thể kiểm tra chức năng qua các endpoint Postman ở trên.
 
 ## Mã nguồn chính
 

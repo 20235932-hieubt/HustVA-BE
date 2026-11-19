@@ -72,7 +72,10 @@ export interface VectorStore {
   ): Promise<void>;
   deleteDocument(documentId: string): Promise<void>;
   /** Chunks of one document in reading order (without vectors), or null when not indexed. */
-  getChunks(documentId: string, embeddingModel: string): Promise<Chunk[] | null>;
+  getChunks(
+    documentId: string,
+    embeddingModel: string,
+  ): Promise<Chunk[] | null>;
   search(
     vector: number[],
     embeddingModel: string,

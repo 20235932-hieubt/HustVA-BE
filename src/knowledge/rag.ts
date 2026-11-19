@@ -12,7 +12,11 @@ import type {
 
 /** The part of the embedding pipeline that retrieval needs. */
 export interface Retriever {
-  search(query: string, limit: number, filter?: SearchFilter): Promise<SearchHit[]>;
+  search(
+    query: string,
+    limit: number,
+    filter?: SearchFilter,
+  ): Promise<SearchHit[]>;
   chunks(documentId: string): Promise<Chunk[] | null>;
 }
 
@@ -25,7 +29,10 @@ export interface RagConfig {
 export function readRagConfig(env: NodeJS.ProcessEnv = process.env): RagConfig {
   const minScore = Number(env.RAG_MIN_SCORE ?? 0.45);
   return {
-    minScore: Number.isFinite(minScore) && minScore >= 0 && minScore < 1 ? minScore : 0.45,
+    minScore:
+      Number.isFinite(minScore) && minScore >= 0 && minScore < 1
+        ? minScore
+        : 0.45,
     outputBudget: 7600,
   };
 }
@@ -51,7 +58,10 @@ const locationOf = (chunk: Chunk): string => {
  */
 export class RagKnowledge implements KnowledgePort {
   /** chunk id → where it lives, for read_document_section. Bounded, oldest dropped first. */
-  private readonly refs = new Map<string, { documentId: string; index: number }>();
+  private readonly refs = new Map<
+    string,
+    { documentId: string; index: number }
+  >();
 
   constructor(
     private readonly retriever: Retriever,
@@ -60,8 +70,12 @@ export class RagKnowledge implements KnowledgePort {
 
   private remember(chunk: Chunk): void {
     this.refs.delete(chunk.id);
-    this.refs.set(chunk.id, { documentId: chunk.payload.documentId, index: chunk.index });
-    if (this.refs.size > MAX_REFS) this.refs.delete(this.refs.keys().next().value!);
+    this.refs.set(chunk.id, {
+      documentId: chunk.payload.documentId,
+      index: chunk.index,
+    });
+    if (this.refs.size > MAX_REFS)
+      this.refs.delete(this.refs.keys().next().value!);
   }
 
   /** Whole passages in the given order: cutting one could remove the sentence that answers. */
@@ -94,7 +108,9 @@ export class RagKnowledge implements KnowledgePort {
     return {
       status: evidence.length ? 'results' : 'empty',
       evidence,
-      warnings: evidence.some((item) => item.quality !== 'accepted') ? [REVIEW_WARNING] : [],
+      warnings: evidence.some((item) => item.quality !== 'accepted')
+        ? [REVIEW_WARNING]
+        : [],
     };
   }
 
@@ -116,7 +132,9 @@ export class RagKnowledge implements KnowledgePort {
         return {
           status: 'unavailable',
           evidence: [],
-          warnings: ['Dịch vụ embedding chưa sẵn sàng; chưa tra cứu được kho tài liệu.'],
+          warnings: [
+            'Dịch vụ embedding chưa sẵn sàng; chưa tra cứu được kho tài liệu.',
+          ],
         };
       throw error;
     }
@@ -131,14 +149,22 @@ export class RagKnowledge implements KnowledgePort {
     return this.result(this.evidence(picked.slice(0, input.limit)));
   }
 
-  async read(input: z.infer<typeof sectionSchema>, signal: AbortSignal): Promise<KnowledgeResult> {
+  async read(
+    input: z.infer<typeof sectionSchema>,
+    signal: AbortSignal,
+  ): Promise<KnowledgeResult> {
     signal.throwIfAborted();
     const ref = this.refs.get(input.evidenceId);
     if (!ref)
-      return { status: 'not_granted', evidence: [], warnings: ['evidenceId không hợp lệ.'] };
+      return {
+        status: 'not_granted',
+        evidence: [],
+        warnings: ['evidenceId không hợp lệ.'],
+      };
     const chunks = await this.retriever.chunks(ref.documentId);
     signal.throwIfAborted();
-    const at = chunks?.findIndex((chunk) => chunk.id === input.evidenceId) ?? -1;
+    const at =
+      chunks?.findIndex((chunk) => chunk.id === input.evidenceId) ?? -1;
     if (!chunks || at < 0)
       return {
         status: 'empty',
@@ -146,7 +172,9 @@ export class RagKnowledge implements KnowledgePort {
         warnings: ['Tài liệu đã được cập nhật; hãy tìm kiếm lại.'],
       };
     // The passage first, then its neighbours, which usually complete the rule.
-    const passages = [chunks[at], chunks[at - 1], chunks[at + 1]].filter(Boolean);
+    const passages = [chunks[at], chunks[at - 1], chunks[at + 1]].filter(
+      Boolean,
+    );
     return this.result(this.evidence(passages.map((chunk) => ({ chunk }))));
   }
 }
