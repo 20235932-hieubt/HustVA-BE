@@ -4,7 +4,8 @@ export const sources: Source[] = [
   {
     id: 'ctt-priority',
     name: 'CTT — học phí & ngoại ngữ',
-    description: 'Hai bài học phí, ngoại ngữ và PDF đính kèm. Lưu cả nội dung lẫn bản gốc.',
+    description:
+      'Hai bài học phí, ngoại ngữ và PDF đính kèm. Lưu cả nội dung lẫn bản gốc.',
     adapter: 'ctt',
     hosts: ['ctt.hust.edu.vn'],
     seeds: [
@@ -15,15 +16,19 @@ export const sources: Source[] = [
   {
     id: 'ctt-regulations',
     name: 'CTT — quy chế đại học',
-    description: 'Đọc toàn bộ phân trang, bài quy chế, bài liên kết và PDF thuộc nguồn.',
+    description:
+      'Đọc toàn bộ phân trang, bài quy chế, bài liên kết và PDF thuộc nguồn.',
     adapter: 'ctt',
     hosts: ['ctt.hust.edu.vn'],
-    seeds: ['https://ctt.hust.edu.vn/DisplayWeb/DisplayQuyChe?tag=%C4%90T%C4%90H'],
+    seeds: [
+      'https://ctt.hust.edu.vn/DisplayWeb/DisplayQuyChe?tag=%C4%90T%C4%90H',
+    ],
   },
   {
     id: 'student-support',
     name: 'HUST — hướng dẫn sinh viên',
-    description: 'Học phí, kế hoạch học tập và hướng dẫn sinh viên. Giữ link nguồn để đối chiếu.',
+    description:
+      'Học phí, kế hoạch học tập và hướng dẫn sinh viên. Giữ link nguồn để đối chiếu.',
     adapter: 'hust',
     hosts: ['hust.edu.vn', 'www.hust.edu.vn'],
     seeds: [
@@ -49,10 +54,13 @@ export const sources: Source[] = [
   {
     id: 'sdh',
     name: 'Sau đại học — kế hoạch học tập',
-    description: 'Bài mẫu kế hoạch học tập sau đại học; giữ tham số xác định bài.',
+    description:
+      'Bài mẫu kế hoạch học tập sau đại học; giữ tham số xác định bài.',
     adapter: 'sdh',
     hosts: ['sdh.hust.edu.vn'],
-    seeds: ['https://sdh.hust.edu.vn/Default.aspx?CategoryID=122&nid=3578&scid=23'],
+    seeds: [
+      'https://sdh.hust.edu.vn/Default.aspx?CategoryID=122&nid=3578&scid=23',
+    ],
   },
 ];
 

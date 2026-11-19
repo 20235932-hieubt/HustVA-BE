@@ -35,7 +35,12 @@ async function extract(): Promise<void> {
         )
         .join('\n')
         .trim();
-      blocks.push({ id: `page-${number}`, type: 'pdf_page', page: number, text });
+      blocks.push({
+        id: `page-${number}`,
+        type: 'pdf_page',
+        page: number,
+        text,
+      });
       page.cleanup();
     }
     parentPort?.postMessage({ blocks });
@@ -43,4 +48,6 @@ async function extract(): Promise<void> {
     await task.destroy();
   }
 }
-extract().catch((error) => parentPort?.postMessage({ error: (error as Error).message }));
+extract().catch((error) =>
+  parentPort?.postMessage({ error: (error as Error).message }),
+);

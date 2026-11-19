@@ -28,7 +28,13 @@ export interface LogFields extends TraceContext {
 }
 
 const context = new AsyncLocalStorage<TraceContext>();
-const ranks: Record<Level, number> = { debug: 10, info: 20, warn: 30, error: 40, silent: 100 };
+const ranks: Record<Level, number> = {
+  debug: 10,
+  info: 20,
+  warn: 30,
+  error: 40,
+  silent: 100,
+};
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const ids = new Set(['traceId', 'conversationId', 'requestId', 'runId']);
 const numbers = new Set([
@@ -65,10 +71,20 @@ const statuses = new Set([
 function safeFields(fields: LogFields): Record<string, string | number> {
   const safe: Record<string, string | number> = {};
   for (const [key, value] of Object.entries(fields)) {
-    if (ids.has(key) && typeof value === 'string' && uuid.test(value)) safe[key] = value;
-    else if (numbers.has(key) && typeof value === 'number' && Number.isFinite(value) && value >= 0)
+    if (ids.has(key) && typeof value === 'string' && uuid.test(value))
+      safe[key] = value;
+    else if (
+      numbers.has(key) &&
+      typeof value === 'number' &&
+      Number.isFinite(value) &&
+      value >= 0
+    )
       safe[key] = Math.round(value);
-    else if (key === 'status' && typeof value === 'string' && statuses.has(value))
+    else if (
+      key === 'status' &&
+      typeof value === 'string' &&
+      statuses.has(value)
+    )
       safe[key] = value;
     else if (
       (key === 'reasonCode' || key === 'errorCode') &&
@@ -89,7 +105,11 @@ function safeFields(fields: LogFields): Record<string, string | number> {
     )
       safe[key] = value;
     else if (key === 'tool' && typeof value === 'string')
-      safe[key] = ['search_knowledge', 'read_document_section', 'submit_answer'].includes(value)
+      safe[key] = [
+        'search_knowledge',
+        'read_document_section',
+        'submit_answer',
+      ].includes(value)
         ? value
         : 'unknown';
   }
@@ -107,15 +127,25 @@ export function currentTrace(): TraceContext {
   return { ...context.getStore() };
 }
 
-export function createLogger(options: { level?: string; write?: (line: string) => void } = {}) {
-  function log(level: Exclude<Level, 'silent'>, event: string, fields: LogFields = {}) {
+export function createLogger(
+  options: { level?: string; write?: (line: string) => void } = {},
+) {
+  function log(
+    level: Exclude<Level, 'silent'>,
+    event: string,
+    fields: LogFields = {},
+  ) {
     const setting = options.level ?? process.env.LOG_LEVEL ?? 'info';
-    const threshold = Object.hasOwn(ranks, setting) ? ranks[setting as Level] : ranks.info;
+    const threshold = Object.hasOwn(ranks, setting)
+      ? ranks[setting as Level]
+      : ranks.info;
     if (ranks[level] < threshold) return;
     const record = {
       timestamp: new Date().toISOString(),
       level,
-      event: /^[a-z][a-z0-9_.]{0,79}$/u.test(event) ? event : 'log.invalid_event',
+      event: /^[a-z][a-z0-9_.]{0,79}$/u.test(event)
+        ? event
+        : 'log.invalid_event',
       ...safeFields({ ...context.getStore(), ...fields }),
     };
     try {

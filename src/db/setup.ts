@@ -15,9 +15,13 @@ interface VectorField {
   similarity?: string;
 }
 
-export function vectorDefinition(config: MongoConfig): { fields: VectorField[] } {
+export function vectorDefinition(config: MongoConfig): {
+  fields: VectorField[];
+} {
   if (!config.embeddingDimension)
-    throw new DatabaseSetupError('Chưa cấu hình số chiều embedding; chưa thể tạo vector index.');
+    throw new DatabaseSetupError(
+      'Chưa cấu hình số chiều embedding; chưa thể tạo vector index.',
+    );
   return {
     fields: [
       {
@@ -35,7 +39,10 @@ export function vectorDefinition(config: MongoConfig): { fields: VectorField[] }
 }
 
 // Never rebuild an existing index silently, especially after changing embedding models.
-export function assertCompatibleVectorIndex(index: Document, config: MongoConfig): void {
+export function assertCompatibleVectorIndex(
+  index: Document,
+  config: MongoConfig,
+): void {
   const definition = (index.latestDefinition ?? index.definition) as
     { fields?: VectorField[] } | undefined;
   const expected = vectorDefinition(config);
@@ -60,7 +67,10 @@ export function assertCompatibleVectorIndex(index: Document, config: MongoConfig
     );
 }
 
-export async function inspectVectorIndex(db: Db, config: MongoConfig): Promise<Document | null> {
+export async function inspectVectorIndex(
+  db: Db,
+  config: MongoConfig,
+): Promise<Document | null> {
   const exists = await db
     .listCollections({ name: collections.chunks }, { nameOnly: true })
     .hasNext();
@@ -81,12 +91,15 @@ export function isVectorIndexReady(index: Document): boolean {
 
 export async function setupKnowledgeDatabase(db: Db, config: MongoConfig) {
   // Validate the existing vector definition before making changes to other resources.
-  const previousIndex = config.embeddingDimension ? await inspectVectorIndex(db, config) : null;
+  const previousIndex = config.embeddingDimension
+    ? await inspectVectorIndex(db, config)
+    : null;
   for (const name of Object.values(collections)) {
     try {
       await db.createCollection(name);
     } catch (error) {
-      if (!(error instanceof MongoServerError && error.code === 48)) throw error;
+      if (!(error instanceof MongoServerError && error.code === 48))
+        throw error;
     }
   }
   await db
@@ -105,7 +118,9 @@ export async function setupKnowledgeDatabase(db: Db, config: MongoConfig) {
   if (!config.embeddingDimension) return { vector: 'skipped' as const };
   if (previousIndex)
     return {
-      vector: isVectorIndexReady(previousIndex) ? ('ready' as const) : ('building' as const),
+      vector: isVectorIndexReady(previousIndex)
+        ? ('ready' as const)
+        : ('building' as const),
     };
   await db.collection(collections.chunks).createSearchIndex({
     name: config.vectorIndexName,

@@ -25,8 +25,10 @@ export const requestTrace: RequestHandler = (req, res, next) => {
         durationMs: performance.now() - started,
       };
       if (aborted) logger.warn('http.request.aborted', fields);
-      else if (res.statusCode >= 500) logger.error('http.request.completed', fields);
-      else if (res.statusCode >= 400) logger.warn('http.request.completed', fields);
+      else if (res.statusCode >= 500)
+        logger.error('http.request.completed', fields);
+      else if (res.statusCode >= 400)
+        logger.warn('http.request.completed', fields);
       else logger.info('http.request.completed', fields);
     };
     res.once(

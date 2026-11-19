@@ -9,6 +9,9 @@ import { EmbeddingService, createEmbeddingRouter } from './embedding/index.js';
 import { RagKnowledge } from './knowledge/rag.js';
 import { requestTrace } from './observability/http.js';
 import { logger } from './observability/logger.js';
+import { readHttpConfig } from './http-config.js';
+import { createToolsRouter } from './tools/routes.js';
+import { getToolManager } from './tools/runtime.js';
 
 const crawlStore = new CrawlStore();
 /** Every saved document is queued for embedding right after the crawler stores it. */
@@ -19,15 +22,19 @@ export const app: express.Express = express();
 app.use(helmet());
 app.use(
   cors({
-    origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000',
+    origin: readHttpConfig().webOrigin,
     exposedHeaders: ['X-Trace-Id'],
   }),
 );
 app.use(requestTrace);
 app.use(express.json({ limit: '1mb' }));
-app.use('/api/v1/crawler', createCrawlerRouter(crawlStore, embedding.publisher));
+app.use(
+  '/api/v1/crawler',
+  createCrawlerRouter(crawlStore, embedding.publisher),
+);
 app.use('/api/v1/embedding', createEmbeddingRouter(embedding));
 app.use('/api/v1/chat', createChatRouter());
+app.use('/api/v1/tools', createToolsRouter(undefined, getToolManager()));
 app.get('/api/v1/health', (_req, res) => {
   res.json({ status: 'ok', service: 'api' });
 });
@@ -42,7 +49,12 @@ app.use(
     const status = error.status ?? 500;
     logger[status >= 500 ? 'error' : 'warn']('http.request.failed', {
       statusCode: status,
-      errorCode: status === 400 ? 'JSON_INVALID' : status === 413 ? 'BODY_TOO_LARGE' : 'HTTP_ERROR',
+      errorCode:
+        status === 400
+          ? 'JSON_INVALID'
+          : status === 413
+            ? 'BODY_TOO_LARGE'
+            : 'HTTP_ERROR',
     });
     res.status(status).json({
       error:

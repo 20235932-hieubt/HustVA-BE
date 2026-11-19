@@ -21,12 +21,15 @@ export function readableDocuments(documents: CrawlDocument[]): string {
           ...document.warnings,
           '',
           ...document.blocks.map(
-            (block) => `${block.page ? `Trang ${block.page}\n` : ''}${block.text}`,
+            (block) =>
+              `${block.page ? `Trang ${block.page}\n` : ''}${block.text}`,
           ),
           ...(document.links?.length
             ? [
                 'Liên kết trong bài:',
-                ...document.links.map((link) => `${link.title || link.kind}: ${link.url}`),
+                ...document.links.map(
+                  (link) => `${link.title || link.kind}: ${link.url}`,
+                ),
               ]
             : []),
         ]
@@ -54,17 +57,28 @@ export async function printRunResults(
           ? 'Đã tạm dừng; nội dung đã lấy vẫn được giữ.'
           : 'Đã xử lý xong lượt crawl.',
   );
-  if (run.status === 'partial') log('Một phần nội dung chưa lấy được hoặc chưa đi hết nguồn.');
-  for (const document of documents.filter((document) => document.quality !== 'index_only')) {
-    log(`\n${document.title}\nNguồn: ${document.url}\n${qualityLabel[document.quality]}`);
+  if (run.status === 'partial')
+    log('Một phần nội dung chưa lấy được hoặc chưa đi hết nguồn.');
+  for (const document of documents.filter(
+    (document) => document.quality !== 'index_only',
+  )) {
+    log(
+      `\n${document.title}\nNguồn: ${document.url}\n${qualityLabel[document.quality]}`,
+    );
     log(
       fullText
         ? document.text
         : document.text.slice(0, 400) + (document.text.length > 400 ? '…' : ''),
     );
   }
-  log(`\nĐọc toàn bộ nội dung: ${path.join(store.directory, 'exports', 'latest.txt')}`);
-  log(`File đầy đủ nội dung JSONL: ${path.join(store.directory, 'exports', 'latest.jsonl')}`);
+  log(
+    `\nĐọc toàn bộ nội dung: ${path.join(store.directory, 'exports', 'latest.txt')}`,
+  );
+  log(
+    `File đầy đủ nội dung JSONL: ${path.join(store.directory, 'exports', 'latest.jsonl')}`,
+  );
   if (documents.some((document) => document.quality === 'needs_review'))
-    log('Tài liệu có cảnh báo vẫn được đưa vào JSONL để đối chiếu với bản gốc.');
+    log(
+      'Tài liệu có cảnh báo vẫn được đưa vào JSONL để đối chiếu với bản gốc.',
+    );
 }

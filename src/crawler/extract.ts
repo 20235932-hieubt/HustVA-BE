@@ -2,7 +2,13 @@ import { load } from 'cheerio';
 import { Worker } from 'node:worker_threads';
 import { hash } from './store.js';
 import { allowedUrl, CrawlError } from './network.js';
-import type { Block, CrawlDocument, CrawlTarget, HttpResult, Source } from './types.js';
+import type {
+  Block,
+  CrawlDocument,
+  CrawlTarget,
+  HttpResult,
+  Source,
+} from './types.js';
 
 const normalize = (text: string): string =>
   text
@@ -41,7 +47,10 @@ export function htmlContent(
   }[source.adapter];
   const content = $(selector).first();
   if (!content.length)
-    throw new CrawlError('TEMPLATE_CHANGED', `Không tìm thấy vùng nội dung ${selector}`);
+    throw new CrawlError(
+      'TEMPLATE_CHANGED',
+      `Không tìm thấy vùng nội dung ${selector}`,
+    );
   const title =
     normalize(
       source.adapter === 'ctt'
@@ -54,13 +63,22 @@ export function htmlContent(
   const listing =
     libraryListing ||
     (source.adapter === 'ctt' &&
-      /DisplayQuyChe|DisplayListBaiViet|DisplayListKeHoach/iu.test(pageUrl.pathname));
-  const add = (href: string | undefined, kind: 'html' | 'pdf', title?: string): void => {
+      /DisplayQuyChe|DisplayListBaiViet|DisplayListKeHoach/iu.test(
+        pageUrl.pathname,
+      ));
+  const add = (
+    href: string | undefined,
+    kind: 'html' | 'pdf',
+    title?: string,
+  ): void => {
     if (!href) return;
     try {
       const resolved = new URL(href, response.url);
       // The library still publishes some internal links with http or without /vi.
-      if (source.adapter === 'library' && source.hosts.includes(resolved.hostname)) {
+      if (
+        source.adapter === 'library' &&
+        source.hosts.includes(resolved.hostname)
+      ) {
         if (resolved.protocol === 'http:') resolved.protocol = 'https:';
         if (/^\/node\/\d+\/?$/u.test(resolved.pathname))
           resolved.pathname = `/vi${resolved.pathname}`;
@@ -75,12 +93,20 @@ export function htmlContent(
               resolved.searchParams.set('page', pages.join(','));
           }
           if (libraryListing && /^\d+$/u.test(tab ?? '') && Number(tab) > 0)
-            resolved.searchParams.set('qt-s_n_ph_m_d_ch_v_', String(Number(tab)));
+            resolved.searchParams.set(
+              'qt-s_n_ph_m_d_ch_v_',
+              String(Number(tab)),
+            );
         }
       }
       const url = allowedUrl(resolved.href, source.hosts).href;
       if (url !== response.url)
-        targets.push({ url, parentUrl: listing ? null : response.url, kind, title });
+        targets.push({
+          url,
+          parentUrl: listing ? null : response.url,
+          kind,
+          title,
+        });
     } catch {
       /* External, private or unsupported targets remain outside this crawl. */
     }
@@ -99,7 +125,11 @@ export function htmlContent(
       .find((element) => {
         try {
           return (
-            Number(new URL($(element).attr('href')!, response.url).searchParams.get('page')) ===
+            Number(
+              new URL($(element).attr('href')!, response.url).searchParams.get(
+                'page',
+              ),
+            ) ===
             current + 1
           );
         } catch {
@@ -115,7 +145,9 @@ export function htmlContent(
       try {
         const url = new URL(href, response.url);
         // Follow category tabs and every pager link; the engine deduplicates URLs.
-        if (/^\/(?:vi\/)?(?:sanpham_dichvu|page-tr-gi-p)\/?$/u.test(url.pathname))
+        if (
+          /^\/(?:vi\/)?(?:sanpham_dichvu|page-tr-gi-p)\/?$/u.test(url.pathname)
+        )
           add(href, 'html', normalize($(element).text()));
       } catch {
         /* Invalid category URLs cannot extend the crawl. */
@@ -123,7 +155,9 @@ export function htmlContent(
     });
   }
   const attachmentRegion =
-    source.adapter === 'sdh' ? content.add('#MainContent_ctl00_ctl00_dgAttach') : content;
+    source.adapter === 'sdh'
+      ? content.add('#MainContent_ctl00_ctl00_dgAttach')
+      : content;
   attachmentRegion.find('a[href]').each((_index, element) => {
     const href = $(element).attr('href');
     if (!href) return;
@@ -135,9 +169,12 @@ export function htmlContent(
       const url = new URL(href, response.url);
       const article = {
         ctt:
-          /\/DisplayWeb\/DisplayBaiViet$/iu.test(url.pathname) && url.searchParams.has('baiviet'),
+          /\/DisplayWeb\/DisplayBaiViet$/iu.test(url.pathname) &&
+          url.searchParams.has('baiviet'),
         hust: /^\/vi\/.+\.html$/iu.test(url.pathname),
-        sdh: /\/Default\.aspx$/iu.test(url.pathname) && url.searchParams.has('nid'),
+        sdh:
+          /\/Default\.aspx$/iu.test(url.pathname) &&
+          url.searchParams.has('nid'),
         library: /^\/(?:vi\/)?node\/\d+\/?$/u.test(url.pathname),
       }[source.adapter];
       if (article) add(href, 'html', normalize($(element).text()));
@@ -182,7 +219,11 @@ export function htmlContent(
   let looseText = '';
   const flush = (): void => {
     if (normalize(looseText))
-      blocks.push({ id: String(blocks.length), type: 'paragraph', text: normalize(looseText) });
+      blocks.push({
+        id: String(blocks.length),
+        type: 'paragraph',
+        text: normalize(looseText),
+      });
     looseText = '';
   };
   const visit = (nodes: ReturnType<typeof content.contents>): void => {
@@ -193,7 +234,9 @@ export function htmlContent(
       }
       if (element.type !== 'tag') return;
       if (!/^(?:h[1-6]|p|li|table)$/u.test(element.tagName)) {
-        const boundary = /^(?:div|section|article|ul|ol|blockquote)$/u.test(element.tagName);
+        const boundary = /^(?:div|section|article|ul|ol|blockquote)$/u.test(
+          element.tagName,
+        );
         if (boundary) flush();
         visit($(element).contents());
         if (boundary) flush();
@@ -237,7 +280,11 @@ export function htmlContent(
   visit(content.contents());
   flush();
   if (!blocks.length && normalize(content.text()))
-    blocks.push({ id: '0', type: 'paragraph', text: normalize(content.text()) });
+    blocks.push({
+      id: '0',
+      type: 'paragraph',
+      text: normalize(content.text()),
+    });
   const fullText = blocks.map((block) => block.text).join('\n\n');
   if (libraryListing && !targets.length)
     throw new CrawlError(
@@ -252,17 +299,26 @@ export function htmlContent(
       'Website nguồn chưa cung cấp nội dung: đang được cập nhật',
     );
   const pointer =
-    !listing && targets.some((target) => target.kind === 'pdf') && fullText.length < 700;
+    !listing &&
+    targets.some((target) => target.kind === 'pdf') &&
+    fullText.length < 700;
   if (!listing && !pointer && fullText.length < 80)
-    throw new CrawlError('EMPTY_CONTENT', 'Nội dung quá ngắn hoặc chỉ có giao diện rỗng');
+    throw new CrawlError(
+      'EMPTY_CONTENT',
+      'Nội dung quá ngắn hoặc chỉ có giao diện rỗng',
+    );
   return {
     title,
     blocks,
-    targets: [...new Map(targets.map((target) => [target.url, target])).values()],
+    targets: [
+      ...new Map(targets.map((target) => [target.url, target])).values(),
+    ],
     listing,
     pointer,
     requiresReview: blocks.some((block) =>
-      block.cells?.some((row) => row.some((cell) => cell.rowSpan !== 1 || cell.colSpan !== 1)),
+      block.cells?.some((row) =>
+        row.some((cell) => cell.rowSpan !== 1 || cell.colSpan !== 1),
+      ),
     ),
     links: [...new Map(links.map((link) => [link.url, link])).values()],
   };
@@ -274,7 +330,10 @@ export async function pdfContent(bytes: Uint8Array): Promise<Block[]> {
   return new Promise((resolve, reject) => {
     const development = import.meta.url.endsWith('.ts');
     const worker = new Worker(
-      new URL(development ? './pdf-worker.ts' : './pdf-worker.js', import.meta.url),
+      new URL(
+        development ? './pdf-worker.ts' : './pdf-worker.js',
+        import.meta.url,
+      ),
       {
         workerData: bytes,
         resourceLimits: { maxOldGenerationSizeMb: 256 },
@@ -288,7 +347,9 @@ export async function pdfContent(bytes: Uint8Array): Promise<Block[]> {
     worker.once('message', (result: { blocks?: Block[]; error?: string }) => {
       clearTimeout(timeout);
       if (result.error || !result.blocks)
-        reject(new CrawlError('PDF_PARSE', result.error ?? 'Không đọc được PDF'));
+        reject(
+          new CrawlError('PDF_PARSE', result.error ?? 'Không đọc được PDF'),
+        );
       else resolve(result.blocks);
       void worker.terminate();
     });
@@ -298,7 +359,8 @@ export async function pdfContent(bytes: Uint8Array): Promise<Block[]> {
     });
     worker.once('exit', (code) => {
       clearTimeout(timeout);
-      if (code !== 0) reject(new CrawlError('PDF_PROCESS', 'Tiến trình đọc PDF bị dừng'));
+      if (code !== 0)
+        reject(new CrawlError('PDF_PROCESS', 'Tiến trình đọc PDF bị dừng'));
     });
   });
 }
@@ -319,7 +381,8 @@ export function makeDocument(
     language: 'vi',
     publishedAt: null,
     issuedAt: null,
-    academicYear: title.match(/20\d{2}\s*[-–]\s*20\d{2}/u)?.[0].replace(/\s/gu, '') ?? null,
+    academicYear:
+      title.match(/20\d{2}\s*[-–]\s*20\d{2}/u)?.[0].replace(/\s/gu, '') ?? null,
     cohorts: [...new Set(title.match(/\bK\d{2}\b/gu) ?? [])],
     validityStatus: 'unknown',
   };
@@ -344,12 +407,17 @@ export function makeDocument(
     firstSeenAt: response.fetchedAt,
     quality,
     warnings: [
-      ...(blocks.some((block) => block.text.includes('Ảnh nhúng trong HTML; cần OCR'))
+      ...(blocks.some((block) =>
+        block.text.includes('Ảnh nhúng trong HTML; cần OCR'),
+      )
         ? ['Chưa đọc chữ trong ảnh nhúng HTML; cần OCR hoặc đối chiếu bản gốc.']
         : []),
       ...blocks
         .filter((block) => block.type === 'pdf_page' && !block.text.trim())
-        .map((block) => `Trang PDF ${block.page} không có chữ trích xuất được; có thể cần OCR.`),
+        .map(
+          (block) =>
+            `Trang PDF ${block.page} không có chữ trích xuất được; có thể cần OCR.`,
+        ),
       ...links
         .filter((link) => link.kind === 'image')
         .map((link) => `Chưa đọc chữ trong hình ảnh: ${link.url}`),

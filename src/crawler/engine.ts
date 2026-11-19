@@ -61,13 +61,17 @@ export async function executeRun(
         const response = await fetcher.get(target.url, target.kind);
         rawHash = await store.saveArtifact(response.bytes);
         if (target.kind === 'pdf') {
-          const blocks = await (options.extractPdf ?? pdfContent)(response.bytes);
+          const blocks = await (options.extractPdf ?? pdfContent)(
+            response.bytes,
+          );
           const document = makeDocument(
             source,
             target,
             response,
             target.title ??
-              decodeURIComponent(new URL(response.url).pathname.split('/').at(-1) ?? 'PDF'),
+              decodeURIComponent(
+                new URL(response.url).pathname.split('/').at(-1) ?? 'PDF',
+              ),
             blocks,
             'needs_review',
           );
@@ -95,7 +99,11 @@ export async function executeRun(
               response,
               parsed.title,
               parsed.blocks,
-              parsed.pointer ? 'index_only' : parsed.requiresReview ? 'needs_review' : 'accepted',
+              parsed.pointer
+                ? 'index_only'
+                : parsed.requiresReview
+                  ? 'needs_review'
+                  : 'accepted',
               parsed.links,
             );
             const status = await save(document);
@@ -113,10 +121,18 @@ export async function executeRun(
             ...run.results.map((result) => result.url),
             ...run.pending.map((target) => target.url),
           ]);
-          const discovered = parsed.targets.filter((target) => !seen.has(target.url));
+          const discovered = parsed.targets.filter(
+            (target) => !seen.has(target.url),
+          );
           // Download attachments first; next listing is queued behind article links.
-          run.pending.push(...discovered.filter((target) => target.kind === 'html'));
-          run.pending.splice(1, 0, ...discovered.filter((target) => target.kind === 'pdf'));
+          run.pending.push(
+            ...discovered.filter((target) => target.kind === 'html'),
+          );
+          run.pending.splice(
+            1,
+            0,
+            ...discovered.filter((target) => target.kind === 'pdf'),
+          );
         }
       } catch (error) {
         if (options.signal?.aborted) {
@@ -128,10 +144,12 @@ export async function executeRun(
         run.results.push({
           url: target.url,
           status:
-            error instanceof CrawlError && ['ROBOTS_DENIED', 'URL_POLICY'].includes(error.code)
+            error instanceof CrawlError &&
+            ['ROBOTS_DENIED', 'URL_POLICY'].includes(error.code)
               ? 'skipped'
               : 'failed',
-          message: error instanceof Error ? error.message : 'Lỗi không xác định',
+          message:
+            error instanceof Error ? error.message : 'Lỗi không xác định',
           errorCode: error instanceof CrawlError ? error.code : 'UNEXPECTED',
         });
       }
@@ -144,15 +162,23 @@ export async function executeRun(
       await store.saveRun(run);
       if (result)
         options.log?.(
-          result.status === 'unchanged' ? 'Nội dung không đổi, giữ bản đã lưu.' : result.message,
+          result.status === 'unchanged'
+            ? 'Nội dung không đổi, giữ bản đã lưu.'
+            : result.message,
         );
     }
     if (run.status !== 'cancelled') {
       const good = run.results.some((result) =>
         ['saved', 'unchanged', 'discovered'].includes(result.status),
       );
-      const bad = run.results.some((result) => ['failed', 'skipped'].includes(result.status));
-      run.status = good ? (bad || run.stopReason ? 'partial' : 'completed') : 'failed';
+      const bad = run.results.some((result) =>
+        ['failed', 'skipped'].includes(result.status),
+      );
+      run.status = good
+        ? bad || run.stopReason
+          ? 'partial'
+          : 'completed'
+        : 'failed';
       run.stopReason ??= 'frontier-exhausted';
     }
     run.finishedAt = new Date().toISOString();

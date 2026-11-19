@@ -1,5 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, unlink, writeFile, open, stat } from 'node:fs/promises';
+import {
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  unlink,
+  writeFile,
+  open,
+  stat,
+} from 'node:fs/promises';
 import path from 'node:path';
 import { defaultDataDir } from './config.js';
 import { getSource } from './sources.js';
@@ -17,7 +26,9 @@ export async function atomicJson(file: string, value: unknown): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
   const temporary = `${file}.${randomUUID()}.tmp`;
   try {
-    await writeFile(temporary, JSON.stringify(value, null, 2) + '\n', { flag: 'wx' });
+    await writeFile(temporary, JSON.stringify(value, null, 2) + '\n', {
+      flag: 'wx',
+    });
     await rename(temporary, file);
   } finally {
     await unlink(temporary).catch(() => {});
@@ -67,7 +78,11 @@ export class CrawlStore {
     try {
       const runs = await this.listRuns();
       if (
-        runs.some((run) => run.sourceId === sourceId && ['queued', 'running'].includes(run.status))
+        runs.some(
+          (run) =>
+            run.sourceId === sourceId &&
+            ['queued', 'running'].includes(run.status),
+        )
       )
         throw new Error('Nguồn này đã có một lượt crawl đang chờ hoặc chạy');
       const now = new Date().toISOString();
@@ -78,7 +93,11 @@ export class CrawlStore {
         createdAt: now,
         updatedAt: now,
         finishedAt: null,
-        pending: source.seeds.map((url) => ({ url, parentUrl: null, kind: 'html' })),
+        pending: source.seeds.map((url) => ({
+          url,
+          parentUrl: null,
+          kind: 'html',
+        })),
         results: [],
         stopReason: null,
         cancelRequested: false,
@@ -112,15 +131,18 @@ export class CrawlStore {
     const run = await this.getRun(id);
     if (!run) throw new Error('Không tìm thấy lượt crawl');
     // Separate flag cannot be overwritten by a crawl checkpoint.
-    await atomicJson(path.join(this.directory, 'runs', `${checkKey(id)}.cancel`), {
-      requestedAt: new Date().toISOString(),
-    });
+    await atomicJson(
+      path.join(this.directory, 'runs', `${checkKey(id)}.cancel`),
+      {
+        requestedAt: new Date().toISOString(),
+      },
+    );
   }
   async cancelled(id: string): Promise<boolean> {
     return (
-      (await stat(path.join(this.directory, 'runs', `${checkKey(id)}.cancel`)).catch(
-        () => null,
-      )) !== null
+      (await stat(
+        path.join(this.directory, 'runs', `${checkKey(id)}.cancel`),
+      ).catch(() => null)) !== null
     );
   }
   async saveArtifact(bytes: Uint8Array): Promise<string> {
@@ -136,7 +158,12 @@ export class CrawlStore {
     return readFile(path.join(this.directory, 'artifacts', checkKey(checksum)));
   }
   private versionFile(id: string, version: string): string {
-    return path.join(this.directory, 'versions', checkKey(id), `${checkKey(version)}.json`);
+    return path.join(
+      this.directory,
+      'versions',
+      checkKey(id),
+      `${checkKey(version)}.json`,
+    );
   }
   async saveDocument(document: CrawlDocument): Promise<'saved' | 'unchanged'> {
     const previous = await this.getDocument(document.documentId);
@@ -145,7 +172,10 @@ export class CrawlStore {
     );
     document.firstSeenAt = previous?.firstSeenAt ?? document.fetchedAt;
     if (!existing)
-      await atomicJson(this.versionFile(document.documentId, document.versionId), document);
+      await atomicJson(
+        this.versionFile(document.documentId, document.versionId),
+        document,
+      );
     const stored = existing ?? document;
     if (previous?.versionId !== stored.versionId) {
       await atomicJson(this.file('latest', document.documentId), {
@@ -156,7 +186,10 @@ export class CrawlStore {
     }
     return 'unchanged';
   }
-  async getDocument(id: string, version?: string): Promise<CrawlDocument | null> {
+  async getDocument(
+    id: string,
+    version?: string,
+  ): Promise<CrawlDocument | null> {
     const pointer = await readJson<{ versionId: string; changedAt: string }>(
       this.file('latest', id),
     );
@@ -169,22 +202,32 @@ export class CrawlStore {
     delete document.review; // Ignore the retired review field in existing local data.
     return {
       ...document,
-      updatedAt: pointer?.versionId === versionId ? pointer.changedAt : document.fetchedAt,
+      updatedAt:
+        pointer?.versionId === versionId
+          ? pointer.changedAt
+          : document.fetchedAt,
     };
   }
   async documents(runId?: string): Promise<CrawlDocument[]> {
     const references = runId
       ? ((await this.getRun(runId))?.results
           .filter((result) => result.documentId && result.versionId)
-          .map((result) => ({ id: result.documentId!, version: result.versionId! })) ?? [])
+          .map((result) => ({
+            id: result.documentId!,
+            version: result.versionId!,
+          })) ?? [])
       : (await files(path.join(this.directory, 'latest'))).map((file) => ({
           id: file.slice(0, -5),
           version: undefined,
         }));
     const unique = [
-      ...new Map(references.map((ref) => [`${ref.id}/${ref.version ?? 'latest'}`, ref])).values(),
+      ...new Map(
+        references.map((ref) => [`${ref.id}/${ref.version ?? 'latest'}`, ref]),
+      ).values(),
     ];
-    const documents = await Promise.all(unique.map((ref) => this.getDocument(ref.id, ref.version)));
+    const documents = await Promise.all(
+      unique.map((ref) => this.getDocument(ref.id, ref.version)),
+    );
     return documents
       .filter((document): document is CrawlDocument => document !== null)
       .sort((a, b) => a.documentId.localeCompare(b.documentId));
@@ -210,7 +253,10 @@ export class CrawlStore {
       await rename(temporary, destination);
       const readableFile = path.join(exportDir, `${scope ?? 'latest'}.txt`);
       const readableTemporary = `${readableFile}.${randomUUID()}.tmp`;
-      await writeFile(readableTemporary, readableDocuments(await this.documents(scope)));
+      await writeFile(
+        readableTemporary,
+        readableDocuments(await this.documents(scope)),
+      );
       await rename(readableTemporary, readableFile);
     }
   }

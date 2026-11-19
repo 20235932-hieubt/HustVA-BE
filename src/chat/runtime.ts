@@ -9,6 +9,8 @@ import { MongoConversationStore } from './repository.js';
 import { ChatService } from './service.js';
 import { logger } from '../observability/logger.js';
 import { performance } from 'node:perf_hooks';
+import { getToolManager } from '../tools/runtime.js';
+import { createRoutingModel, createToolSelector } from '../tools/selector.js';
 
 export const chatShutdown = new AbortController();
 let pending: Promise<ChatService> | undefined;
@@ -30,13 +32,17 @@ export function getChatService(): Promise<ChatService> {
       await connection.client.connect();
       const store = new MongoConversationStore(connection.db);
       await store.init();
-      logger.info('chat.runtime.ready', { durationMs: performance.now() - started });
+      logger.info('chat.runtime.ready', {
+        durationMs: performance.now() - started,
+      });
       // TODO(CHAT-02): add a controlled MongoDBSaver integration when checkpoint/resume is required.
       // For this baseline only sanitized completed history is persisted; scratchpad stays per-turn.
       return new ChatService(
         store,
         createChatAgent(createGeminiModel(config), knowledge, config),
         config.timeoutMs,
+        getToolManager(),
+        createToolSelector(createRoutingModel(config)),
       );
     } catch {
       logger.error('chat.runtime.failed', {
@@ -48,7 +54,7 @@ export function getChatService(): Promise<ChatService> {
       throw new ChatError(
         503,
         'CHAT_NOT_READY',
-        'Chatbot chưa kết nối được MongoDB hoặc cấu hình chưa hợp lệ. Kiểm tra cấu hình và db:check.',
+        'Chatbot đang tạm thời gián đoạn. Bạn vui lòng thử lại sau nhé.',
       );
     }
   })().catch((error) => {
