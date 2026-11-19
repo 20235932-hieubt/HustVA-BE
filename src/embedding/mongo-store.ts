@@ -45,8 +45,13 @@ const ALL_COHORTS = '*';
 
 /** The cluster cannot be reached: retried later like a stopped embedding service. */
 function unavailable(error: unknown): never {
-  if (error instanceof MongoNetworkError || error instanceof MongoServerSelectionError)
-    throw new EmbedderUnavailableError('Không kết nối được MongoDB Atlas để lưu/tìm vector');
+  if (
+    error instanceof MongoNetworkError ||
+    error instanceof MongoServerSelectionError
+  )
+    throw new EmbedderUnavailableError(
+      'Không kết nối được MongoDB Atlas để lưu/tìm vector',
+    );
   throw error;
 }
 
@@ -129,7 +134,10 @@ export class MongoVectorStore implements VectorStore {
           })),
           { ordered: false },
         );
-      await this.chunks.deleteMany({ documentId, _id: { $nin: stored.map((chunk) => chunk.id) } });
+      await this.chunks.deleteMany({
+        documentId,
+        _id: { $nin: stored.map((chunk) => chunk.id) },
+      });
       const payload = stored[0]?.payload;
       if (!payload) {
         await this.documents.deleteOne({ _id: documentId as never });
@@ -170,7 +178,10 @@ export class MongoVectorStore implements VectorStore {
     }
   }
 
-  async getChunks(documentId: string, embeddingModel: string): Promise<Chunk[] | null> {
+  async getChunks(
+    documentId: string,
+    embeddingModel: string,
+  ): Promise<Chunk[] | null> {
     try {
       const docs = await this.chunks
         .find(
@@ -191,10 +202,14 @@ export class MongoVectorStore implements VectorStore {
     options: { limit: number; filter?: SearchFilter },
   ): Promise<SearchHit[]> {
     if (vector.length !== this.options.dimension) return [];
-    const filter: Document = { indexVersion: this.indexVersion(embeddingModel) };
+    const filter: Document = {
+      indexVersion: this.indexVersion(embeddingModel),
+    };
     if (options.filter?.sourceId) filter.sourceId = options.filter.sourceId;
     if (options.filter?.cohort)
-      filter.cohortScope = { $in: [options.filter.cohort.toUpperCase(), ALL_COHORTS] };
+      filter.cohortScope = {
+        $in: [options.filter.cohort.toUpperCase(), ALL_COHORTS],
+      };
     try {
       const docs = await this.chunks
         .aggregate<ChunkDoc & { score: number }>([
@@ -214,7 +229,10 @@ export class MongoVectorStore implements VectorStore {
         .toArray();
       // Atlas reports cosine as (1 + cos) / 2; convert back so RAG_MIN_SCORE means the same
       // thing for the local and the Atlas store.
-      return docs.map((doc) => ({ score: doc.score * 2 - 1, chunk: toChunk(doc) }));
+      return docs.map((doc) => ({
+        score: doc.score * 2 - 1,
+        chunk: toChunk(doc),
+      }));
     } catch (error) {
       unavailable(error);
     }

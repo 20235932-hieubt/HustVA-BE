@@ -37,7 +37,11 @@ export class IngestionPipeline {
     return { key: `${info.model}@${info.revision}`, dimension: info.dimension };
   }
 
-  private upToDate(state: IndexState | null, versionId: string, model: string): boolean {
+  private upToDate(
+    state: IndexState | null,
+    versionId: string,
+    model: string,
+  ): boolean {
     if (
       !state ||
       state.versionId !== versionId ||
@@ -46,11 +50,15 @@ export class IngestionPipeline {
     )
       return false;
     return (
-      state.status === 'skipped' || (state.status === 'indexed' && state.embeddingModel === model)
+      state.status === 'skipped' ||
+      (state.status === 'indexed' && state.embeddingModel === model)
     );
   }
 
-  async index(documentId: string, { force = false } = {}): Promise<IndexOutcome> {
+  async index(
+    documentId: string,
+    { force = false } = {},
+  ): Promise<IndexOutcome> {
     const { reader, embedder, vectors, states, batchSize, log } = this.deps;
     const document = await reader.get(documentId);
     if (!document) return 'missing';
@@ -61,19 +69,26 @@ export class IngestionPipeline {
       chunkerVersion: CHUNKER_VERSION,
       store: this.deps.vectors.name,
       attempts:
-        previous?.versionId === document.versionId && previous.status === 'failed'
+        previous?.versionId === document.versionId &&
+        previous.status === 'failed'
           ? previous.attempts
           : 0,
     };
     const save = (
-      state: Pick<IndexState, 'status' | 'embeddingModel' | 'chunkCount' | 'error'> & {
+      state: Pick<
+        IndexState,
+        'status' | 'embeddingModel' | 'chunkCount' | 'error'
+      > & {
         attempts?: number;
       },
-    ): Promise<void> => states.set({ ...base, ...state, updatedAt: new Date().toISOString() });
+    ): Promise<void> =>
+      states.set({ ...base, ...state, updatedAt: new Date().toISOString() });
     try {
       const model = await this.modelKey();
-      if (!force && this.upToDate(previous, document.versionId, model.key)) return 'unchanged';
-      const chunks = document.quality === 'index_only' ? [] : buildChunks(document);
+      if (!force && this.upToDate(previous, document.versionId, model.key))
+        return 'unchanged';
+      const chunks =
+        document.quality === 'index_only' ? [] : buildChunks(document);
       if (!chunks.length) {
         await vectors.deleteDocument(documentId);
         await save({
@@ -90,10 +105,19 @@ export class IngestionPipeline {
       const stored: StoredChunk[] = [];
       for (let start = 0; start < chunks.length; start += batchSize) {
         const batch = chunks.slice(start, start + batchSize);
-        const embedded = await embedder.embed(batch.map((chunk) => chunk.embedText));
-        batch.forEach((chunk, i) => stored.push({ ...chunk, vector: embedded[i] }));
+        const embedded = await embedder.embed(
+          batch.map((chunk) => chunk.embedText),
+        );
+        batch.forEach((chunk, i) =>
+          stored.push({ ...chunk, vector: embedded[i] }),
+        );
       }
-      await vectors.replaceDocument(documentId, model.key, model.dimension, stored);
+      await vectors.replaceDocument(
+        documentId,
+        model.key,
+        model.dimension,
+        stored,
+      );
       await save({
         status: 'indexed',
         embeddingModel: model.key,
@@ -106,8 +130,16 @@ export class IngestionPipeline {
       const message = (error as Error).message;
       if (error instanceof EmbedderUnavailableError) {
         // Keep an indexed state of this same version; only mark new content as pending.
-        if (!(previous?.versionId === document.versionId && previous.status === 'indexed'))
-          await save({ status: 'pending', embeddingModel: null, chunkCount: 0, error: message });
+        if (!(
+          previous?.versionId === document.versionId &&
+          previous.status === 'indexed'
+        ))
+          await save({
+            status: 'pending',
+            embeddingModel: null,
+            chunkCount: 0,
+            error: message,
+          });
         return 'unavailable';
       }
       await save({
@@ -126,7 +158,10 @@ export class IngestionPipeline {
   async outdated(): Promise<string[]> {
     const model = await this.modelKey();
     const result: string[] = [];
-    for (const { documentId, versionId } of await this.deps.reader.listLatest()) {
+    for (const {
+      documentId,
+      versionId,
+    } of await this.deps.reader.listLatest()) {
       const state = await this.deps.states.get(documentId);
       if (this.upToDate(state, versionId, model.key)) continue;
       if (
@@ -140,7 +175,11 @@ export class IngestionPipeline {
     return result;
   }
 
-  async search(query: string, limit: number, filter?: SearchFilter): Promise<SearchHit[]> {
+  async search(
+    query: string,
+    limit: number,
+    filter?: SearchFilter,
+  ): Promise<SearchHit[]> {
     const model = await this.modelKey();
     const [vector] = await this.deps.embedder.embed([query]);
     return this.deps.vectors.search(vector, model.key, { limit, filter });

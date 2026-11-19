@@ -2,7 +2,13 @@ import { CrawlStore } from './store.js';
 import { PublicFetcher, CrawlError } from './network.js';
 import { getSource } from './sources.js';
 import { htmlContent, makeDocument, pdfContent } from './extract.js';
-import type { Block, CrawlDocument, CrawlRun, DocumentEventPublisher, Fetcher } from './types.js';
+import type {
+  Block,
+  CrawlDocument,
+  CrawlRun,
+  DocumentEventPublisher,
+  Fetcher,
+} from './types.js';
 
 export async function executeRun(
   store: CrawlStore,
@@ -17,7 +23,9 @@ export async function executeRun(
 ): Promise<void> {
   const source = getSource(run.sourceId);
   const fetcher = options.fetcher ?? new PublicFetcher(source, options.signal);
-  const save = async (document: CrawlDocument): Promise<'saved' | 'unchanged'> => {
+  const save = async (
+    document: CrawlDocument,
+  ): Promise<'saved' | 'unchanged'> => {
     const status = await store.saveDocument(document);
     if (status === 'saved' && options.publisher) {
       // A lost event is recovered by the embedding reconcile job, so it never fails the crawl.
@@ -28,7 +36,9 @@ export async function executeRun(
           versionId: document.versionId,
         })
         .catch((error: Error) =>
-          options.log?.(`Không gửi được event document.saved: ${error.message}`),
+          options.log?.(
+            `Không gửi được event document.saved: ${error.message}`,
+          ),
         );
     }
     return status;

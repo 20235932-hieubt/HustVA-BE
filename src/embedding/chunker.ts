@@ -24,7 +24,8 @@ const APPENDIX = /^(?:PHỤ LỤC|Phụ lục)(?=$|[\s.:\-–])/u;
 
 /** "Điều 2. Quyết định này có hiệu lực kể từ ngày ký. Các …" → "Điều 2. Quyết định này có hiệu lực kể từ ngày ký" */
 const articleTitle = (line: string): string => {
-  const [, number = line, rest = ''] = /^(\S+\s+\d+[a-zđ]?[.:]?)\s*(.*)$/u.exec(line) ?? [];
+  const [, number = line, rest = ''] =
+    /^(\S+\s+\d+[a-zđ]?[.:]?)\s*(.*)$/u.exec(line) ?? [];
   const title = rest
     .split(/(?<=[^\d])[.:;]\s/u)[0]
     .slice(0, 100)
@@ -90,7 +91,9 @@ function splitLongLine(line: string): string[] {
 }
 
 function tableRows(block: Block): string[] {
-  const rows = block.rows?.length ? block.rows : block.text.split('\n').map((line) => [line]);
+  const rows = block.rows?.length
+    ? block.rows
+    : block.text.split('\n').map((line) => [line]);
   return rows.map((row) => row.join(' | ').trim()).filter(Boolean);
 }
 
@@ -99,7 +102,9 @@ function tableRows(block: Block): string[] {
  * Long articles break at a Khoản ("1. ", "2. ") once the chunk is big enough. Tables are kept
  * whole, or split by rows with the header row repeated.
  */
-export function chunkDocument(document: CrawlDocument): Omit<Chunk, 'embedText'>[] {
+export function chunkDocument(
+  document: CrawlDocument,
+): Omit<Chunk, 'embedText'>[] {
   const payload = payloadOf(document);
   const chunks: Omit<Chunk, 'embedText' | 'id' | 'index'>[] = [];
   let section: string | null = null;
@@ -112,7 +117,9 @@ export function chunkDocument(document: CrawlDocument): Omit<Chunk, 'embedText'>
   let pageEnd: number | null = null;
 
   const headings = (): string[] =>
-    [section, chapter, article].filter((value): value is string => Boolean(value));
+    [section, chapter, article].filter((value): value is string =>
+      Boolean(value),
+    );
   const flush = (): void => {
     if (text.trim().length >= MIN_CHUNK)
       chunks.push({
@@ -127,7 +134,11 @@ export function chunkDocument(document: CrawlDocument): Omit<Chunk, 'embedText'>
     pageStart = null;
     pageEnd = null;
   };
-  const append = (piece: string, page: number | null, separator: string): void => {
+  const append = (
+    piece: string,
+    page: number | null,
+    separator: string,
+  ): void => {
     if (text && text.length + piece.length + separator.length > TARGET) flush();
     text = text ? `${text}${separator}${piece}` : piece;
     if (page !== null) {
@@ -196,7 +207,9 @@ export function chunkDocument(document: CrawlDocument): Omit<Chunk, 'embedText'>
       const header = rows.length > 1 ? rows[0] : null;
       let group: string[] = [];
       const emit = (): void => {
-        const body = (header && group[0] !== header ? [header, ...group] : group).join('\n');
+        const body = (
+          header && group[0] !== header ? [header, ...group] : group
+        ).join('\n');
         if (body.length >= MIN_CHUNK)
           chunks.push({
             kind: 'table',
@@ -211,14 +224,20 @@ export function chunkDocument(document: CrawlDocument): Omit<Chunk, 'embedText'>
       if (rows.join('\n').length <= MAX) group = rows;
       else
         for (const row of header ? rows.slice(1) : rows) {
-          if (group.length && [header, ...group, row].join('\n').length > TARGET) emit();
+          if (
+            group.length &&
+            [header, ...group, row].join('\n').length > TARGET
+          )
+            emit();
           group.push(row);
         }
       emit();
       continue;
     }
     // Paragraphs are separated by a blank line; lines inside a block or PDF page by a newline.
-    value.split('\n').forEach((raw, index) => line(raw, page, index === 0 ? '\n\n' : '\n'));
+    value
+      .split('\n')
+      .forEach((raw, index) => line(raw, page, index === 0 ? '\n\n' : '\n'));
   }
   flush();
 
@@ -229,7 +248,9 @@ export function chunkDocument(document: CrawlDocument): Omit<Chunk, 'embedText'>
   }));
 }
 
-export function embedTextOf(chunk: Pick<Chunk, 'text' | 'headings' | 'payload'>): string {
+export function embedTextOf(
+  chunk: Pick<Chunk, 'text' | 'headings' | 'payload'>,
+): string {
   return [chunk.payload.title, chunk.headings.join(' › '), '', chunk.text]
     .filter((part, index) => part || index === 2)
     .join('\n')
@@ -245,7 +266,10 @@ interface OutlineMark {
 }
 
 /** The document as one string, with where each page and heading starts in it. */
-function outlineOf(document: CrawlDocument): { text: string; marks: OutlineMark[] } {
+function outlineOf(document: CrawlDocument): {
+  text: string;
+  marks: OutlineMark[];
+} {
   const parts: string[] = [];
   const marks: OutlineMark[] = [];
   let offset = 0;
@@ -295,7 +319,8 @@ function outlineOf(document: CrawlDocument): { text: string; marks: OutlineMark[
   return { text: parts.join('\n'), marks };
 }
 
-const articleNumber = (title: string): string => ARTICLE.exec(title)?.[0] ?? title;
+const articleNumber = (title: string): string =>
+  ARTICLE.exec(title)?.[0] ?? title;
 
 /**
  * Sliding window over the whole document, cut at a space. Headings and pages only locate the
@@ -327,19 +352,25 @@ export function windowChunks(
         ...new Set(
           [
             first?.article,
-            ...marks.filter((m) => m.offset > from && m.offset < to).map((m) => m.article),
+            ...marks
+              .filter((m) => m.offset > from && m.offset < to)
+              .map((m) => m.article),
           ].filter((value): value is string => Boolean(value)),
         ),
       ];
       const article =
-        articles.length > 1 ? [...new Set(articles.map(articleNumber))].join(', ') : articles[0];
+        articles.length > 1
+          ? [...new Set(articles.map(articleNumber))].join(', ')
+          : articles[0];
       const index = chunks.length;
       chunks.push({
-        id: uuidFromHash(`${document.documentId}:${document.versionId}:${index}`),
+        id: uuidFromHash(
+          `${document.documentId}:${document.versionId}:${index}`,
+        ),
         index,
         kind: 'text',
-        headings: [first?.section, first?.chapter, article].filter((value): value is string =>
-          Boolean(value),
+        headings: [first?.section, first?.chapter, article].filter(
+          (value): value is string => Boolean(value),
         ),
         pageStart: first?.page ?? null,
         pageEnd: markAt(to - 1)?.page ?? null,

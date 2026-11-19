@@ -35,7 +35,10 @@ async function jsonFiles(dir: string): Promise<string[]> {
   }
 }
 
-const matches = (chunk: Pick<StoredChunk, 'payload'>, filter: SearchFilter = {}): boolean =>
+const matches = (
+  chunk: Pick<StoredChunk, 'payload'>,
+  filter: SearchFilter = {},
+): boolean =>
   (!filter.sourceId || chunk.payload.sourceId === filter.sourceId) &&
   (!filter.cohort ||
     !chunk.payload.cohorts.length ||
@@ -58,10 +61,14 @@ export class LocalVectorStore implements VectorStore {
     if (this.cache) return this.cache;
     const dir = path.join(this.directory, 'vectors');
     const entries = await Promise.all(
-      (await jsonFiles(dir)).map((file) => readJson<VectorFile>(path.join(dir, file))),
+      (await jsonFiles(dir)).map((file) =>
+        readJson<VectorFile>(path.join(dir, file)),
+      ),
     );
     this.cache = new Map(
-      entries.filter((entry): entry is VectorFile => entry !== null).map((e) => [e.documentId, e]),
+      entries
+        .filter((entry): entry is VectorFile => entry !== null)
+        .map((e) => [e.documentId, e]),
     );
     return this.cache;
   }
@@ -76,12 +83,17 @@ export class LocalVectorStore implements VectorStore {
     this.cache?.set(documentId, entry);
   }
   async deleteDocument(documentId: string): Promise<void> {
-    await unlink(this.file(documentId)).catch((error: NodeJS.ErrnoException) => {
-      if (error.code !== 'ENOENT') throw error;
-    });
+    await unlink(this.file(documentId)).catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ENOENT') throw error;
+      },
+    );
     this.cache?.delete(documentId);
   }
-  async getChunks(documentId: string, embeddingModel: string): Promise<Chunk[] | null> {
+  async getChunks(
+    documentId: string,
+    embeddingModel: string,
+  ): Promise<Chunk[] | null> {
     const entry = (await this.load()).get(documentId);
     if (!entry || entry.embeddingModel !== embeddingModel) return null;
     return entry.chunks
@@ -99,7 +111,11 @@ export class LocalVectorStore implements VectorStore {
     const hits: SearchHit[] = [];
     for (const entry of (await this.load()).values()) {
       // Vectors from another model live in a different space; never compare them.
-      if (entry.embeddingModel !== embeddingModel || entry.dimension !== vector.length) continue;
+      if (
+        entry.embeddingModel !== embeddingModel ||
+        entry.dimension !== vector.length
+      )
+        continue;
       for (const { vector: stored, ...chunk } of entry.chunks) {
         if (!matches(chunk, options.filter)) continue;
         let score = 0;
@@ -126,7 +142,9 @@ export class LocalIndexStateStore implements IndexStateStore {
   async list(): Promise<IndexState[]> {
     const dir = path.join(this.directory, 'state');
     const states = await Promise.all(
-      (await jsonFiles(dir)).map((file) => readJson<IndexState>(path.join(dir, file))),
+      (await jsonFiles(dir)).map((file) =>
+        readJson<IndexState>(path.join(dir, file)),
+      ),
     );
     return states.filter((state): state is IndexState => state !== null);
   }

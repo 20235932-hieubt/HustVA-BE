@@ -17,7 +17,8 @@ export class EmbeddingService {
   readonly states: IndexStateStore;
   readonly embedder: Embedder;
   readonly vectors: VectorStore;
-  lastReconcile: { at: string; queued: number; error: string | null } | null = null;
+  lastReconcile: { at: string; queued: number; error: string | null } | null =
+    null;
   private timer: NodeJS.Timeout | null = null;
   private mongo: ReturnType<typeof createMongoConnection> | null = null;
 
@@ -26,10 +27,15 @@ export class EmbeddingService {
     private readonly config = embeddingConfig,
     private readonly log: (message: string) => void = console.log,
   ) {
-    this.embedder = new HttpEmbedder(config.serviceUrl, config.requestTimeoutMs);
+    this.embedder = new HttpEmbedder(
+      config.serviceUrl,
+      config.requestTimeoutMs,
+    );
     this.states = new LocalIndexStateStore(config.dataDir);
     this.vectors =
-      config.store === 'atlas' ? this.atlasStore() : new LocalVectorStore(config.dataDir);
+      config.store === 'atlas'
+        ? this.atlasStore()
+        : new LocalVectorStore(config.dataDir);
     this.pipeline = new IngestionPipeline({
       reader: new CrawlStoreReader(crawlStore),
       embedder: this.embedder,
@@ -46,7 +52,9 @@ export class EmbeddingService {
   private atlasStore(): VectorStore {
     const mongo = readMongoConfig();
     if (!mongo.embeddingDimension)
-      throw new Error('EMBEDDING_STORE=atlas cần EMBEDDING_DIMENSION (768 với mô hình hiện tại).');
+      throw new Error(
+        'EMBEDDING_STORE=atlas cần EMBEDDING_DIMENSION (768 với mô hình hiện tại).',
+      );
     this.mongo = createMongoConnection(mongo);
     return new MongoVectorStore(this.mongo.db, {
       vectorIndex: mongo.vectorIndexName,
@@ -64,12 +72,21 @@ export class EmbeddingService {
     try {
       const outdated = await this.pipeline.outdated();
       outdated.forEach((documentId) => this.queue.enqueue(documentId));
-      this.lastReconcile = { at: new Date().toISOString(), queued: outdated.length, error: null };
-      if (outdated.length) this.log(`[embedding] Reconcile: xếp hàng ${outdated.length} tài liệu`);
+      this.lastReconcile = {
+        at: new Date().toISOString(),
+        queued: outdated.length,
+        error: null,
+      };
+      if (outdated.length)
+        this.log(`[embedding] Reconcile: xếp hàng ${outdated.length} tài liệu`);
       return outdated.length;
     } catch (error) {
       const message = (error as Error).message;
-      this.lastReconcile = { at: new Date().toISOString(), queued: 0, error: message };
+      this.lastReconcile = {
+        at: new Date().toISOString(),
+        queued: 0,
+        error: message,
+      };
       if (!(error instanceof EmbedderUnavailableError)) throw error;
       this.log(`[embedding] Reconcile bỏ qua: ${message}`);
       return 0;

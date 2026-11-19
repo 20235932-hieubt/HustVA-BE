@@ -30,7 +30,9 @@ export class HttpEmbedder implements Embedder {
       throw new EmbedderUnavailableError('Embedding service đang tải mô hình');
     }
     if (!response.ok)
-      throw new Error(`Embedding service trả HTTP ${response.status}: ${await response.text()}`);
+      throw new Error(
+        `Embedding service trả HTTP ${response.status}: ${await response.text()}`,
+      );
     return (await response.json()) as T;
   }
 
@@ -50,7 +52,9 @@ export class HttpEmbedder implements Embedder {
       result.vectors?.length !== texts.length ||
       result.vectors.some((vector) => vector.length !== dimension)
     )
-      throw new Error('Embedding service trả số vector hoặc số chiều không khớp');
+      throw new Error(
+        'Embedding service trả số vector hoặc số chiều không khớp',
+      );
     return result.vectors;
   }
 }

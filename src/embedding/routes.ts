@@ -4,7 +4,9 @@ import { EmbedderUnavailableError } from './embedder.js';
 import type { EmbeddingService } from './service.js';
 import type { IndexStatus } from './types.js';
 
-export function createEmbeddingRouter(service: EmbeddingService): express.Router {
+export function createEmbeddingRouter(
+  service: EmbeddingService,
+): express.Router {
   const router = express.Router();
   router.use((req, res, next) => {
     res.set('Cache-Control', 'no-store');
@@ -16,7 +18,12 @@ export function createEmbeddingRouter(service: EmbeddingService): express.Router
   });
 
   router.get('/status', async (_req, res) => {
-    const counts: Record<IndexStatus, number> = { pending: 0, indexed: 0, skipped: 0, failed: 0 };
+    const counts: Record<IndexStatus, number> = {
+      pending: 0,
+      indexed: 0,
+      skipped: 0,
+      failed: 0,
+    };
     let chunks = 0;
     for (const state of await service.states.list()) {
       counts[state.status]++;
@@ -59,7 +66,12 @@ export function createEmbeddingRouter(service: EmbeddingService): express.Router
   });
 
   router.post('/search', async (req, res) => {
-    const { query, limit = 5, sourceId, cohort } = (req.body ?? {}) as Record<string, unknown>;
+    const {
+      query,
+      limit = 5,
+      sourceId,
+      cohort,
+    } = (req.body ?? {}) as Record<string, unknown>;
     if (typeof query !== 'string' || !query.trim() || query.length > 2000) {
       res.status(400).json({ error: 'Cần query là chuỗi 1–2000 ký tự' });
       return;
@@ -106,16 +118,25 @@ export function createEmbeddingRouter(service: EmbeddingService): express.Router
     }
   });
 
-  router.use((_req, res) => res.status(404).json({ error: 'Endpoint embedding không tồn tại' }));
+  router.use((_req, res) =>
+    res.status(404).json({ error: 'Endpoint embedding không tồn tại' }),
+  );
   router.use(
-    (error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    (
+      error: Error,
+      _req: express.Request,
+      res: express.Response,
+      _next: express.NextFunction,
+    ) => {
       void _next;
       if (error.message.includes('ID không hợp lệ')) {
         res.status(400).json({ error: error.message });
         return;
       }
       console.error('Embedding API:', error.message);
-      res.status(500).json({ error: 'Không thể xử lý yêu cầu embedding; xem log API' });
+      res
+        .status(500)
+        .json({ error: 'Không thể xử lý yêu cầu embedding; xem log API' });
     },
   );
   return router;
