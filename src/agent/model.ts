@@ -64,8 +64,13 @@ export function createGeminiModel(config: ChatConfig): AgentModel {
             { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
           ],
         });
-        bound ??= chat.bindTools(modelTools);
-        finalOnly ??= chat.bindTools(modelTools.filter((item) => item.name === 'submit_answer'));
+        // Gemini's default AUTO mode may answer in plain text, which the graph must reject because it
+        // carries no citations. ANY makes every turn a tool call (search, read or submit_answer).
+        bound ??= chat.bindTools(modelTools, { tool_choice: 'any' });
+        finalOnly ??= chat.bindTools(
+          modelTools.filter((item) => item.name === 'submit_answer'),
+          { tool_choice: 'any' },
+        );
         const result = await (options.final ? finalOnly : bound).invoke(messages, { signal });
         signal.throwIfAborted();
         return result;
