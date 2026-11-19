@@ -24,7 +24,7 @@ const APPENDIX = /^(?:PHỤ LỤC|Phụ lục)(?=$|[\s.:\-–])/u;
 
 /** "Điều 2. Quyết định này có hiệu lực kể từ ngày ký. Các …" → "Điều 2. Quyết định này có hiệu lực kể từ ngày ký" */
 const articleTitle = (line: string): string => {
-  const [, number = line, rest = ''] = /^(\S+\s+\S+?[.:]?)\s*(.*)$/u.exec(line) ?? [];
+  const [, number = line, rest = ''] = /^(\S+\s+\d+[a-zđ]?[.:]?)\s*(.*)$/u.exec(line) ?? [];
   const title = rest
     .split(/(?<=[^\d])[.:;]\s/u)[0]
     .slice(0, 100)
@@ -32,6 +32,8 @@ const articleTitle = (line: string): string => {
   return title ? `${number} ${title}` : number;
 };
 const CLAUSE = /^\d{1,2}\.\s/u;
+/** "CHƯƠNG II ĐÀO TẠO ĐẠI HỌC ........ 12": dot leaders mark a table-of-contents entry. */
+const TOC_ENTRY = /(?:\.\s*){5,}\d*$/u;
 
 /**
  * Inline images (`data:image/png;base64,...`) sometimes end up in extracted HTML text. They carry
@@ -274,7 +276,9 @@ function outlineOf(document: CrawlDocument): { text: string; marks: OutlineMark[
       let lineStart = offset;
       for (const raw of value.split('\n')) {
         const line = raw.trim();
-        if (CHAPTER.test(line) && line.length <= MAX_HEADING) {
+        if (TOC_ENTRY.test(line)) {
+          // A table-of-contents line names a chapter or article but does not start it.
+        } else if (CHAPTER.test(line) && line.length <= MAX_HEADING) {
           chapter = line;
           article = null;
           mark(lineStart);
