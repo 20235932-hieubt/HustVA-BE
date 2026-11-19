@@ -3,7 +3,7 @@ import { readChatConfig } from '../agent/config.js';
 import { createGeminiModel } from '../agent/model.js';
 import { createMongoConnection } from '../db/client.js';
 import { readMongoConfig } from '../db/config.js';
-import { StubKnowledge } from '../knowledge/stub.js';
+import { StubKnowledge, type KnowledgePort } from '../knowledge/stub.js';
 import { ChatError } from './contracts.js';
 import { MongoConversationStore } from './repository.js';
 import { ChatService } from './service.js';
@@ -13,6 +13,12 @@ import { performance } from 'node:perf_hooks';
 export const chatShutdown = new AbortController();
 let pending: Promise<ChatService> | undefined;
 let connection: ReturnType<typeof createMongoConnection> | undefined;
+let knowledge: KnowledgePort = new StubKnowledge();
+
+/** Called once by app.ts with the retrieval adapter; the stub stays only as a fallback. */
+export function useKnowledge(port: KnowledgePort): void {
+  knowledge = port;
+}
 
 export function getChatService(): Promise<ChatService> {
   pending ??= (async () => {
@@ -29,7 +35,7 @@ export function getChatService(): Promise<ChatService> {
       // For this baseline only sanitized completed history is persisted; scratchpad stays per-turn.
       return new ChatService(
         store,
-        createChatAgent(createGeminiModel(config), new StubKnowledge(), config),
+        createChatAgent(createGeminiModel(config), knowledge, config),
         config.timeoutMs,
       );
     } catch {

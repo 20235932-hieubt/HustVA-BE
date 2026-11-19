@@ -25,7 +25,7 @@ export function readChatConfig(env: NodeJS.ProcessEnv = process.env): ChatConfig
     maxToolRounds: number('CHAT_MAX_TOOL_ROUNDS', 3, 5),
     maxToolCalls: number('CHAT_MAX_TOOL_CALLS', 6, 10),
     maxModelCalls: number('CHAT_MAX_MODEL_CALLS', 4, 6),
-    maxTurnTokens: number('CHAT_MAX_TURN_TOKENS', 12_000, 50_000),
+    maxTurnTokens: number('CHAT_MAX_TURN_TOKENS', 24_000, 50_000),
     maxOutputTokens: number('CHAT_MAX_OUTPUT_TOKENS', 1200, 2000),
   };
 }

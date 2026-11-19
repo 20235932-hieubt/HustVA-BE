@@ -79,6 +79,16 @@ export interface HttpResult {
   bytes: Uint8Array;
   fetchedAt: string;
 }
+/** Sent after a new document version is saved. Carries ids only; consumers re-read the store. */
+export interface DocumentSavedEvent {
+  event: 'document.saved';
+  documentId: string;
+  versionId: string;
+}
+/** Local queue today; RabbitMQ later. */
+export interface DocumentEventPublisher {
+  publish(event: DocumentSavedEvent): Promise<void>;
+}
 export interface Fetcher {
   get(url: string, kind?: 'html' | 'pdf'): Promise<HttpResult>;
   close?(): Promise<void>;

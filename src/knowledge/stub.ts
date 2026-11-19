@@ -11,26 +11,47 @@ export const searchSchema = z.strictObject({
 export const sectionSchema = z.strictObject({
   evidenceId: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/u),
 });
-// TODO(RETRIEVAL-03): extend evidence with source URL, document/version/index IDs,
-// location and publication state before implementing claim-level citation rendering.
+
+/** One retrieved passage. `id` is what the model cites in `submit_answer`. */
+export interface Evidence {
+  id: string;
+  text: string;
+  isMock: boolean;
+  title?: string;
+  url?: string;
+  documentId?: string;
+  versionId?: string;
+  /** "Chương II › Điều 10, trang 4" */
+  location?: string;
+  /** Crawler quality label; `needs_review` means the text must be checked against the original. */
+  quality?: string;
+  score?: number;
+}
 export interface KnowledgeResult {
-  status: 'not_implemented' | 'empty' | 'results';
-  evidence: { id: string; text: string; isMock: boolean }[];
+  status: 'not_implemented' | 'empty' | 'results' | 'unavailable' | 'not_granted';
+  evidence: Evidence[];
   warnings: string[];
 }
+/** Filters taken from the trusted turn context, never from model arguments. */
+export interface SearchScope {
+  cohort?: string;
+}
 export interface KnowledgePort {
-  search(input: z.infer<typeof searchSchema>, signal: AbortSignal): Promise<KnowledgeResult>;
+  search(
+    input: z.infer<typeof searchSchema>,
+    signal: AbortSignal,
+    scope?: SearchScope,
+  ): Promise<KnowledgeResult>;
   read(input: z.infer<typeof sectionSchema>, signal: AbortSignal): Promise<KnowledgeResult>;
 }
 
+/** Kept for tests and for running the chat without the embedding service wired in. */
 export class StubKnowledge implements KnowledgePort {
   async search(
     _input: z.infer<typeof searchSchema>,
     signal: AbortSignal,
   ): Promise<KnowledgeResult> {
     signal.throwIfAborted();
-    // TODO(RETRIEVAL-01): replace with Atlas Vector Search over published, reviewed chunks.
-    // TODO(RETRIEVAL-02): resolve embedding model/dimension/indexVersion; recheck publication from MongoDB.
     return {
       status: 'not_implemented',
       evidence: [],
@@ -39,7 +60,6 @@ export class StubKnowledge implements KnowledgePort {
   }
   async read(_input: z.infer<typeof sectionSchema>, signal: AbortSignal): Promise<KnowledgeResult> {
     signal.throwIfAborted();
-    // TODO(TOOLS-01): resolve only evidence IDs granted to this turn; enforce version/section limits.
     return {
       status: 'not_implemented',
       evidence: [],

@@ -59,7 +59,8 @@ export interface ChatResult {
   reasonCode: string;
   warnings: string[];
   policyVersion: string;
-  retrievalMode: 'stub';
+  /** `rag`: answers come only from retrieved, cited passages. `stub`: no knowledge base wired in. */
+  retrievalMode: 'stub' | 'rag';
 }
 export interface ChatTurn {
   requestId: string;
@@ -69,15 +70,20 @@ export interface ChatTurn {
   createdAt: Date;
 }
 
-export function reply(status: ChatStatus, answer: string, reasonCode: string): ChatResult {
+export function reply(
+  status: ChatStatus,
+  answer: string,
+  reasonCode: string,
+  extra: Partial<Pick<ChatResult, 'citations' | 'warnings'>> = {},
+): ChatResult {
   return {
     status,
     answer,
     reasonCode,
-    citations: [],
+    citations: extra.citations ?? [],
     policyVersion,
-    retrievalMode: 'stub',
-    warnings: ['Tra cứu tri thức đang dùng stub; chưa kết nối kho quy định HUST.'],
+    retrievalMode: 'rag',
+    warnings: extra.warnings ?? [],
   };
 }
 

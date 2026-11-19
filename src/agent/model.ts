@@ -8,18 +8,25 @@ import { logger } from '../observability/logger.js';
 
 export type ModelReply = AIMessage | AIMessageChunk;
 export interface AgentModel {
-  invoke(messages: BaseMessage[], signal: AbortSignal): Promise<ModelReply>;
+  /** `final`: the turn's tool budget is spent, so only `submit_answer` is offered. */
+  invoke(
+    messages: BaseMessage[],
+    signal: AbortSignal,
+    options?: { final?: boolean },
+  ): Promise<ModelReply>;
 }
 // Schemas only: execution is dispatched through the backend gate, never through model-provided code.
 const modelTools = [
   tool(async () => '', {
     name: 'search_knowledge',
-    description: 'Tra cứu nguồn HUST. STUB: chưa có dữ liệu thật.',
+    description:
+      'Tìm theo nghĩa trong kho văn bản HUST đã crawl (quy chế, học phí, thông báo...). Trả về các đoạn evidence kèm id, tiêu đề, vị trí và link nguồn.',
     schema: searchSchema,
   }),
   tool(async () => '', {
     name: 'read_document_section',
-    description: 'Đọc thêm section theo evidence đã cấp. STUB.',
+    description:
+      'Đọc đoạn ngay trước và sau một evidenceId đã nhận trong lượt này, khi đoạn đó bị cắt dở hoặc thiếu ngữ cảnh.',
     schema: sectionSchema,
   }),
   tool(async () => '', {
@@ -30,9 +37,11 @@ const modelTools = [
 ];
 
 export function createGeminiModel(config: ChatConfig): AgentModel {
+  let chat: ChatGoogle | undefined;
   let bound: ReturnType<ChatGoogle['bindTools']> | undefined;
+  let finalOnly: ReturnType<ChatGoogle['bindTools']> | undefined;
   return {
-    async invoke(messages, signal) {
+    async invoke(messages, signal, options = {}) {
       signal.throwIfAborted();
       if (!config.apiKey || !config.model) {
         logger.warn('gemini.configuration.missing', { errorCode: 'GEMINI_NOT_CONFIGURED' });
@@ -43,7 +52,7 @@ export function createGeminiModel(config: ChatConfig): AgentModel {
         );
       }
       try {
-        bound ??= new ChatGoogle({
+        chat ??= new ChatGoogle({
           apiKey: config.apiKey,
           model: config.model,
           maxRetries: 0,
@@ -54,8 +63,15 @@ export function createGeminiModel(config: ChatConfig): AgentModel {
             { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
             { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
           ],
-        }).bindTools(modelTools);
-        const result = await bound.invoke(messages, { signal });
+        });
+        // Gemini's default AUTO mode may answer in plain text, which the graph must reject because it
+        // carries no citations. ANY makes every turn a tool call (search, read or submit_answer).
+        bound ??= chat.bindTools(modelTools, { tool_choice: 'any' });
+        finalOnly ??= chat.bindTools(
+          modelTools.filter((item) => item.name === 'submit_answer'),
+          { tool_choice: 'any' },
+        );
+        const result = await (options.final ? finalOnly : bound).invoke(messages, { signal });
         signal.throwIfAborted();
         return result;
       } catch (error) {

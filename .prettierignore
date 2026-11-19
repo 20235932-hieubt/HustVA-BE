@@ -5,3 +5,7 @@ coverage
 pnpm-lock.yaml
 next-env.d.ts
 .local
+
+.venv/
+**/.venv/
+__pycache__/

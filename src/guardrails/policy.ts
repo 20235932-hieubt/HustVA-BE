@@ -1,4 +1,5 @@
 import { reply, type ChatResult, type Draft } from '../chat/contracts.js';
+import type { Evidence } from '../knowledge/stub.js';
 
 export function normalize(text: string): string {
   return text
@@ -128,7 +129,7 @@ export function fallback(
   const templates = {
     needs_clarification: 'Bạn cần hỗ trợ thủ tục hoặc chủ đề cụ thể nào?',
     insufficient_evidence:
-      'Mình chưa có tài liệu đã kiểm tra đủ để xác nhận nội dung này. Kho tra cứu hiện chưa được kết nối; mình chưa thể kết luận quy định áp dụng.',
+      'Mình chưa tìm thấy tài liệu HUST đủ căn cứ để xác nhận nội dung này, nên chưa thể kết luận quy định áp dụng. Bạn có thể hỏi cụ thể hơn hoặc liên hệ kênh chính thức của trường.',
     out_of_scope:
       'Mình tập trung hỗ trợ công tác sinh viên và thông tin học vụ HUST. Bạn có câu hỏi về thủ tục, chính sách hoặc dịch vụ sinh viên không?',
     requires_authentication:
@@ -157,9 +158,50 @@ export function fallback(
   return reply(status, answer, status.toUpperCase());
 }
 
-export function validateDraft(draft: Draft): ChatResult {
+/**
+ * Generation gate: an `answered` draft is rendered only when every claim cites evidence that a
+ * tool returned in THIS turn. The answer text is built here from those claims, with numbered
+ * sources, so the model cannot add uncited sentences or invent citations.
+ */
+export function validateDraft(draft: Draft, granted: Record<string, Evidence> = {}): ChatResult {
   if (draft.status !== 'answered') return fallback(draft.status, draft.missingFields);
-  // TODO(RETRIEVAL-04): require claim-level grounding + publication recheck after real retrieval ships.
-  // A stub cannot supply verified evidence. Never render model claims or fake citations as HUST policy.
-  return reply('insufficient_evidence', fallback('insufficient_evidence').answer, 'KB-03');
+  if (!draft.claims.length)
+    return reply('insufficient_evidence', fallback('insufficient_evidence').answer, 'CLAIMS_EMPTY');
+  const used: Evidence[] = [];
+  for (const claim of draft.claims)
+    for (const id of claim.evidenceIds) {
+      const evidence = granted[id];
+      if (!evidence || evidence.isMock)
+        return reply(
+          'insufficient_evidence',
+          fallback('insufficient_evidence').answer,
+          'CLAIM_UNGROUNDED',
+        );
+      if (!used.includes(evidence)) used.push(evidence);
+    }
+  const number = (id: string) => used.findIndex((evidence) => evidence.id === id) + 1;
+  const sentences = draft.claims.map(
+    (claim) =>
+      `${claim.text.trim()} [${[...new Set(claim.evidenceIds.map(number))].sort((a, b) => a - b).join(', ')}]`,
+  );
+  const sources = used.map(
+    (evidence, index) =>
+      `[${index + 1}] ${evidence.title ?? 'Tài liệu HUST'}${evidence.location ? ` (${evidence.location})` : ''}${evidence.url ? ` - ${evidence.url}` : ''}`,
+  );
+  const unreviewed = used.some((evidence) => evidence.quality !== 'accepted');
+  return reply('answered', `${sentences.join('\n')}\n\nNguồn:\n${sources.join('\n')}`, 'GROUNDED', {
+    citations: used.map((evidence) => ({
+      evidenceId: evidence.id,
+      title: evidence.title ?? '',
+      url: evidence.url ?? '',
+      documentId: evidence.documentId ?? '',
+      versionId: evidence.versionId ?? '',
+      location: evidence.location ?? '',
+    })),
+    warnings: unreviewed
+      ? [
+          'Nội dung trích từ tài liệu chưa được duyệt (thường là PDF); hãy đối chiếu bản gốc theo link nguồn.',
+        ]
+      : [],
+  });
 }
