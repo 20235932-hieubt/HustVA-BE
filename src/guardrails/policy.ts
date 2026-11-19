@@ -1,5 +1,6 @@
 import { reply, type ChatResult, type Draft } from '../chat/contracts.js';
 import type { Evidence } from '../knowledge/stub.js';
+import { PrivacySession } from '../privacy/session.js';
 
 export function normalize(text: string): string {
   return text
@@ -22,24 +23,32 @@ export function hasSecret(text: string): boolean {
   return secretPattern.test(normalize(text));
 }
 
-export function redactPersonalData(text: string): string {
-  return normalize(text)
-    .replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/giu, '[EMAIL]')
-    .replace(/(?:\+84|0)(?:[ .-]?\d){9,10}(?!\d)/gu, '[PHONE]')
-    .replace(
-      /((?:mssv|mã\s*(?:số\s*)?sinh\s*viên|ma\s*(?:so\s*)?sinh\s*vien|cccd|cmnd|số tài khoản|so tai khoan)\s*[:=]?\s*)[a-z0-9-]{6,}/giu,
-      '$1[IDENTIFIER]',
-    );
+export function redactPersonalData(
+  text: string,
+  privacy?: PrivacySession,
+): string {
+  const session = privacy ?? new PrivacySession();
+  try {
+    return session.pseudonymize(text);
+  } finally {
+    if (!privacy) session.dispose();
+  }
 }
 
-export function checkInput(text: string): {
+export function checkInput(
+  text: string,
+  privacy?: PrivacySession,
+): {
   message: string;
   result?: ChatResult;
   retainUser: boolean;
 } {
   const clean = normalize(text);
   const value = fold(clean);
-  const message = redactPersonalData(clean);
+  // Recognized credentials never enter the reversible personal-data map.
+  const message = hasSecret(clean)
+    ? '[Đã loại thông tin xác thực]'
+    : redactPersonalData(clean, privacy);
   // Safety support has priority over ordinary scope/refusal rules. No invented hotline numbers.
   if (
     /(?:em|toi|minh) (?:dang |rat |chi )*(?:muon|dinh|sap) (?:tu tu|tu sat|lam hai ban than|chet)/u.test(
@@ -55,7 +64,11 @@ export function checkInput(text: string): {
         'SAFE-02',
       ),
     };
-  if (/(?:em|toi|minh) (?:dang |da )?bi (?:quay roi|bao luc|de doa|xam hai)/u.test(value))
+  if (
+    /(?:em|toi|minh) (?:dang |da )?bi (?:quay roi|bao luc|de doa|xam hai)/u.test(
+      value,
+    )
+  )
     return {
       message: '[Nội dung cần hỗ trợ con người]',
       retainUser: false,
@@ -108,7 +121,11 @@ export function checkInput(text: string): {
       value,
     )
   )
-    return { message, retainUser: true, result: fallback('requires_authentication') };
+    return {
+      message,
+      retainUser: true,
+      result: fallback('requires_authentication'),
+    };
   if (/^(?:xin chao|chao|hello|hi|cam on|thank you|thanks)[!. ]*$/u.test(value))
     return {
       message,
@@ -153,7 +170,9 @@ export function fallback(
       ? `Bạn cho biết ${[...new Set(missingFields)]
           .slice(0, 2)
           .map((field) => labels[field])
-          .join(' và ')} được không? Thông tin này giúp xác định đúng phạm vi cần tra cứu.`
+          .join(
+            ' và ',
+          )} được không? Thông tin này giúp xác định đúng phạm vi cần tra cứu.`
       : templates[status];
   return reply(status, answer, status.toUpperCase());
 }
@@ -163,10 +182,37 @@ export function fallback(
  * tool returned in THIS turn. The answer text is built here from those claims, with numbered
  * sources, so the model cannot add uncited sentences or invent citations.
  */
-export function validateDraft(draft: Draft, granted: Record<string, Evidence> = {}): ChatResult {
-  if (draft.status !== 'answered') return fallback(draft.status, draft.missingFields);
+export function validateDraft(
+  draft: Draft,
+  granted: Record<string, Evidence> = {},
+  privacy?: PrivacySession,
+): ChatResult {
+  const references = [...new Set(draft.entityRefs ?? [])];
+  const claimTokens = draft.claims.flatMap(
+    (claim) =>
+      claim.text.match(/\[\[PII_(?:EMAIL|PHONE|ID|NAME)_[a-f0-9]{32}\]\]/gu) ??
+      [],
+  );
+  if ([...references, ...claimTokens].some((token) => !privacy?.owns(token)))
+    return reply(
+      'insufficient_evidence',
+      fallback('insufficient_evidence').answer,
+      'PRIVACY_REFERENCE_INVALID',
+    );
+  if (draft.claims.some((claim) => hasSecret(claim.text)))
+    return reply(
+      'insufficient_evidence',
+      fallback('insufficient_evidence').answer,
+      'PRIVACY_CONTENT_INVALID',
+    );
+  if (draft.status !== 'answered')
+    return fallback(draft.status, draft.missingFields);
   if (!draft.claims.length)
-    return reply('insufficient_evidence', fallback('insufficient_evidence').answer, 'CLAIMS_EMPTY');
+    return reply(
+      'insufficient_evidence',
+      fallback('insufficient_evidence').answer,
+      'CLAIMS_EMPTY',
+    );
   const used: Evidence[] = [];
   for (const claim of draft.claims)
     for (const id of claim.evidenceIds) {
@@ -179,29 +225,35 @@ export function validateDraft(draft: Draft, granted: Record<string, Evidence> = 
         );
       if (!used.includes(evidence)) used.push(evidence);
     }
-  const number = (id: string) => used.findIndex((evidence) => evidence.id === id) + 1;
+  const number = (id: string) =>
+    used.findIndex((evidence) => evidence.id === id) + 1;
   const sentences = draft.claims.map(
     (claim) =>
-      `${claim.text.trim()} [${[...new Set(claim.evidenceIds.map(number))].sort((a, b) => a - b).join(', ')}]`,
+      `${privacy ? privacy.pseudonymize(claim.text) : claim.text.trim()} [${[...new Set(claim.evidenceIds.map(number))].sort((a, b) => a - b).join(', ')}]`,
   );
   const sources = used.map(
     (evidence, index) =>
       `[${index + 1}] ${evidence.title ?? 'Tài liệu HUST'}${evidence.location ? ` (${evidence.location})` : ''}${evidence.url ? ` - ${evidence.url}` : ''}`,
   );
   const unreviewed = used.some((evidence) => evidence.quality !== 'accepted');
-  return reply('answered', `${sentences.join('\n')}\n\nNguồn:\n${sources.join('\n')}`, 'GROUNDED', {
-    citations: used.map((evidence) => ({
-      evidenceId: evidence.id,
-      title: evidence.title ?? '',
-      url: evidence.url ?? '',
-      documentId: evidence.documentId ?? '',
-      versionId: evidence.versionId ?? '',
-      location: evidence.location ?? '',
-    })),
-    warnings: unreviewed
-      ? [
-          'Nội dung trích từ tài liệu chưa được duyệt (thường là PDF); hãy đối chiếu bản gốc theo link nguồn.',
-        ]
-      : [],
-  });
+  return reply(
+    'answered',
+    `${sentences.join('\n')}\n\nNguồn:\n${sources.join('\n')}`,
+    'GROUNDED',
+    {
+      citations: used.map((evidence) => ({
+        evidenceId: evidence.id,
+        title: evidence.title ?? '',
+        url: evidence.url ?? '',
+        documentId: evidence.documentId ?? '',
+        versionId: evidence.versionId ?? '',
+        location: evidence.location ?? '',
+      })),
+      warnings: unreviewed
+        ? [
+            'Nội dung trích từ tài liệu chưa được duyệt (thường là PDF); hãy đối chiếu bản gốc theo link nguồn.',
+          ]
+        : [],
+    },
+  );
 }

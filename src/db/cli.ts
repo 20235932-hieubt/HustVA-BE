@@ -24,7 +24,9 @@ async function main(): Promise<void> {
         'Đã chuẩn bị knowledge_documents, knowledge_chunks, ingestion_runs và index thường.',
       );
       if (result.vector === 'skipped') {
-        console.log('Chưa tạo vector index: đặt EMBEDDING_DIMENSION sau khi chốt model embedding.');
+        console.log(
+          'Chưa tạo vector index: đặt EMBEDDING_DIMENSION sau khi chốt model embedding.',
+        );
       } else if (result.vector === 'ready') {
         console.log('Vector index có sẵn, đúng cấu hình và queryable.');
       } else {
@@ -35,7 +37,9 @@ async function main(): Promise<void> {
       return;
     }
     if (!config.embeddingDimension) {
-      console.log('Chỉ kiểm tra kết nối. Vector Search chưa cấu hình số chiều embedding.');
+      console.log(
+        'Chỉ kiểm tra kết nối. Vector Search chưa cấu hình số chiều embedding.',
+      );
       return;
     }
     const index = await inspectVectorIndex(db, config);

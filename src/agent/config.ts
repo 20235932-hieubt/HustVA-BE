@@ -10,12 +10,18 @@ export interface ChatConfig {
   maxTurnTokens: number;
   maxOutputTokens: number;
 }
-export function readChatConfig(env: NodeJS.ProcessEnv = process.env): ChatConfig {
+export function readChatConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): ChatConfig {
   function number(key: string, fallback: number, maximum: number) {
     const raw = env[key]?.trim();
     const value = raw ? Number(raw) : fallback;
     if (!Number.isInteger(value) || value < 1 || value > maximum)
-      throw new ChatError(503, 'CHAT_CONFIG_INVALID', `Cấu hình ${key} không hợp lệ.`);
+      throw new ChatError(
+        503,
+        'CHAT_CONFIG_INVALID',
+        `Cấu hình ${key} không hợp lệ.`,
+      );
     return value;
   }
   return {

@@ -25,7 +25,10 @@ export function allowedUrl(value: string, hosts: string[]): URL {
   )
     throw new CrawlError('URL_POLICY', 'URL nằm ngoài nguồn HTTPS cho phép');
   if (/\/(?:login|users|admin|oauth|cong-no)(?:[/?]|$)/iu.test(url.pathname))
-    throw new CrawlError('URL_POLICY', 'Không crawl trang đăng nhập hoặc dữ liệu riêng');
+    throw new CrawlError(
+      'URL_POLICY',
+      'Không crawl trang đăng nhập hoặc dữ liệu riêng',
+    );
   url.hash = '';
   return url;
 }
@@ -42,20 +45,29 @@ const publicLookup: LookupFunction = (hostname, options, callback) => {
       callback(error, '', 4);
       return;
     }
-    if (!addresses.length || addresses.some((address) => !isPublicAddress(address.address))) {
+    if (
+      !addresses.length ||
+      addresses.some((address) => !isPublicAddress(address.address))
+    ) {
       callback(
-        Object.assign(new Error('DNS không trỏ hoàn toàn tới IP công khai'), { code: 'EACCES' }),
+        Object.assign(new Error('DNS không trỏ hoàn toàn tới IP công khai'), {
+          code: 'EACCES',
+        }),
         '',
         4,
       );
       return;
     }
     const chosen =
-      addresses.find((address) => !options.family || address.family === options.family) ??
-      addresses[0];
+      addresses.find(
+        (address) => !options.family || address.family === options.family,
+      ) ?? addresses[0];
     if (options.all) {
       // Node's net lookup callback type omits its all:true overload.
-      (callback as unknown as (error: null, values: typeof addresses) => void)(null, addresses);
+      (callback as unknown as (error: null, values: typeof addresses) => void)(
+        null,
+        addresses,
+      );
     } else callback(null, chosen.address, chosen.family);
   });
 };
@@ -70,7 +82,10 @@ const robotsParser = createRequire(import.meta.url)('robots-parser') as (
 ) => RobotRules;
 type Rules = { missing: boolean; parser: RobotRules | null; delayMs: number };
 export class PublicFetcher implements Fetcher {
-  private readonly dispatcher = new Agent({ connect: { lookup: publicLookup }, connections: 1 });
+  private readonly dispatcher = new Agent({
+    connect: { lookup: publicLookup },
+    connections: 1,
+  });
   private readonly rules = new Map<string, Rules>();
   constructor(
     private readonly source: Source,
@@ -79,7 +94,11 @@ export class PublicFetcher implements Fetcher {
   async close(): Promise<void> {
     await this.dispatcher.close();
   }
-  private async raw(value: string, maxBytes: number, isRobots = false): Promise<HttpResult> {
+  private async raw(
+    value: string,
+    maxBytes: number,
+    isRobots = false,
+  ): Promise<HttpResult> {
     let url = allowedUrl(value, this.source.hosts);
     for (let redirects = 0; redirects <= 5; redirects++) {
       if (!isRobots) await this.checkRobots(url);
@@ -98,14 +117,16 @@ export class PublicFetcher implements Fetcher {
         redirect: 'manual',
         signal,
         headers: {
-          'user-agent': 'HustVACrawler/0.1 (student knowledge sources; bounded local runs)',
+          'user-agent':
+            'HustVACrawler/0.1 (student knowledge sources; bounded local runs)',
           accept: 'text/html,application/pdf,text/plain;q=0.8',
         },
       });
       if ([301, 302, 303, 307, 308].includes(response.status)) {
         const location = response.headers.get('location');
         await response.body?.cancel();
-        if (!location) throw new CrawlError('REDIRECT', 'Redirect thiếu địa chỉ đích');
+        if (!location)
+          throw new CrawlError('REDIRECT', 'Redirect thiếu địa chỉ đích');
         url = allowedUrl(new URL(location, url).href, this.source.hosts);
         continue;
       }
@@ -120,16 +141,25 @@ export class PublicFetcher implements Fetcher {
               : 0;
         retryMs = Math.max(0, retryMs || 0);
         if (retryMs > 60_000)
-          throw new CrawlError('RETRY_LATER', 'Máy chủ yêu cầu đợi lâu; thử lượt crawl khác sau');
+          throw new CrawlError(
+            'RETRY_LATER',
+            'Máy chủ yêu cầu đợi lâu; thử lượt crawl khác sau',
+          );
         previous.set(url.origin, Date.now() + retryMs);
-        throw new CrawlError('TRANSIENT', `HTTP ${response.status}, sẽ thử lại trong giới hạn`);
+        throw new CrawlError(
+          'TRANSIENT',
+          `HTTP ${response.status}, sẽ thử lại trong giới hạn`,
+        );
       }
       const chunks: Uint8Array[] = [];
       let size = 0;
       for await (const chunk of response.body ?? []) {
         size += chunk.length;
         if (size > maxBytes)
-          throw new CrawlError('SIZE_LIMIT', 'Tài liệu vượt giới hạn dung lượng');
+          throw new CrawlError(
+            'SIZE_LIMIT',
+            'Tài liệu vượt giới hạn dung lượng',
+          );
         chunks.push(chunk);
       }
       return {
@@ -145,16 +175,27 @@ export class PublicFetcher implements Fetcher {
   private async checkRobots(url: URL): Promise<void> {
     let rules = this.rules.get(url.origin);
     if (!rules) {
-      const response = await this.raw(`${url.origin}/robots.txt`, 1024 * 1024, true);
+      const response = await this.raw(
+        `${url.origin}/robots.txt`,
+        1024 * 1024,
+        true,
+      );
       const text = Buffer.from(response.bytes).toString('utf8');
       if ([404, 410].includes(response.status))
         rules = { missing: true, parser: null, delayMs: 1100 };
-      else if (response.status >= 200 && response.status < 300 && !/<html[\s>]/iu.test(text)) {
+      else if (
+        response.status >= 200 &&
+        response.status < 300 &&
+        !/<html[\s>]/iu.test(text)
+      ) {
         const parser = robotsParser(response.url, text);
         rules = {
           missing: false,
           parser,
-          delayMs: Math.max(1100, (parser.getCrawlDelay('HustVACrawler') ?? 0) * 1000),
+          delayMs: Math.max(
+            1100,
+            (parser.getCrawlDelay('HustVACrawler') ?? 0) * 1000,
+          ),
         };
       } else
         throw new CrawlError(
@@ -163,17 +204,28 @@ export class PublicFetcher implements Fetcher {
         );
       this.rules.set(url.origin, rules);
     }
-    if (!rules.missing && rules.parser?.isAllowed(url.href, 'HustVACrawler') === false)
-      throw new CrawlError('ROBOTS_DENIED', 'robots.txt không cho phép đường dẫn này');
+    if (
+      !rules.missing &&
+      rules.parser?.isAllowed(url.href, 'HustVACrawler') === false
+    )
+      throw new CrawlError(
+        'ROBOTS_DENIED',
+        'robots.txt không cho phép đường dẫn này',
+      );
   }
   async get(url: string, kind: 'html' | 'pdf' = 'html'): Promise<HttpResult> {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const result = await this.raw(url, kind === 'pdf' ? 25 * 1024 * 1024 : 2 * 1024 * 1024);
-        if (result.status !== 200) throw new CrawlError('HTTP_STATUS', `HTTP ${result.status}`);
+        const result = await this.raw(
+          url,
+          kind === 'pdf' ? 25 * 1024 * 1024 : 2 * 1024 * 1024,
+        );
+        if (result.status !== 200)
+          throw new CrawlError('HTTP_STATUS', `HTTP ${result.status}`);
         return result;
       } catch (error) {
-        const retryable = !(error instanceof CrawlError) || error.code === 'TRANSIENT';
+        const retryable =
+          !(error instanceof CrawlError) || error.code === 'TRANSIENT';
         if (!retryable || attempt === 2 || this.signal?.aborted) throw error;
         await delay(1000 * 2 ** attempt, undefined, { signal: this.signal });
       }

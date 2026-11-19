@@ -2,7 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { MongoServerError, type Db } from 'mongodb';
 import type { ChatResult, StudentContext } from './contracts.js';
 
-export const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
+export const tokenHash = (token: string) =>
+  createHash('sha256').update(token).digest('hex');
 export interface Conversation {
   _id: string;
   tokenHash: string;
@@ -17,6 +18,7 @@ export interface RequestRecord {
   requestId: string;
   runId: string;
   fingerprint: string;
+  privacyVersion?: string;
   user: string;
   retainInContext: boolean;
   status: 'pending' | 'completed' | 'failed';
@@ -28,13 +30,27 @@ export interface RequestRecord {
 export interface ConversationStore {
   create(hash: string): Promise<Conversation>;
   find(id: string, hash: string): Promise<Conversation | null>;
-  acquire(id: string, hash: string, runId: string, until: Date): Promise<Conversation | null>;
+  acquire(
+    id: string,
+    hash: string,
+    runId: string,
+    until: Date,
+  ): Promise<Conversation | null>;
   release(id: string, runId: string): Promise<void>;
   request(id: string, requestId: string): Promise<RequestRecord | null>;
   begin(record: RequestRecord): Promise<void>;
-  complete(record: RequestRecord, context: StudentContext, result: ChatResult): Promise<void>;
+  complete(
+    record: RequestRecord,
+    context: StudentContext,
+    result: ChatResult,
+  ): Promise<void>;
   fail(record: RequestRecord, code: string): Promise<void>;
-  list(id: string, limit: number, offset: number, contextOnly?: boolean): Promise<RequestRecord[]>;
+  list(
+    id: string,
+    limit: number,
+    offset: number,
+    contextOnly?: boolean,
+  ): Promise<RequestRecord[]>;
   remove(id: string): Promise<void>;
 }
 
@@ -72,7 +88,11 @@ export class MongoConversationStore implements ConversationStore {
     return conversation;
   }
   find(id: string, hash: string) {
-    return this.conversations.findOne({ _id: id, tokenHash: hash, expiresAt: { $gt: new Date() } });
+    return this.conversations.findOne({
+      _id: id,
+      tokenHash: hash,
+      expiresAt: { $gt: new Date() },
+    });
   }
   acquire(id: string, hash: string, runId: string, until: Date) {
     return this.conversations.findOneAndUpdate(
@@ -80,7 +100,10 @@ export class MongoConversationStore implements ConversationStore {
         _id: id,
         tokenHash: hash,
         expiresAt: { $gt: new Date() },
-        $or: [{ lease: { $exists: false } }, { 'lease.until': { $lt: new Date() } }],
+        $or: [
+          { lease: { $exists: false } },
+          { 'lease.until': { $lt: new Date() } },
+        ],
       },
       { $set: { lease: { runId, until } } },
       { returnDocument: 'after' },
@@ -93,7 +116,10 @@ export class MongoConversationStore implements ConversationStore {
     );
   }
   request(id: string, requestId: string) {
-    return this.requests.findOne({ _id: `${id}:${requestId}`, expiresAt: { $gt: new Date() } });
+    return this.requests.findOne({
+      _id: `${id}:${requestId}`,
+      expiresAt: { $gt: new Date() },
+    });
   }
   async begin(record: RequestRecord) {
     try {
@@ -104,7 +130,11 @@ export class MongoConversationStore implements ConversationStore {
       throw error;
     }
   }
-  async complete(record: RequestRecord, context: StudentContext, result: ChatResult) {
+  async complete(
+    record: RequestRecord,
+    context: StudentContext,
+    result: ChatResult,
+  ) {
     // The lease prevents another turn/delete from modifying this conversation during completion.
     const updated = await this.conversations.updateOne(
       {
@@ -117,7 +147,13 @@ export class MongoConversationStore implements ConversationStore {
     if (updated.matchedCount !== 1) throw new Error('LEASE_LOST');
     const saved = await this.requests.updateOne(
       { _id: record._id, runId: record.runId, status: 'pending' },
-      { $set: { result, status: 'completed' } },
+      {
+        $set: {
+          result,
+          status: 'completed',
+          retainInContext: record.retainInContext,
+        },
+      },
     );
     if (saved.matchedCount !== 1) throw new Error('REQUEST_CONFLICT');
   }
@@ -132,7 +168,9 @@ export class MongoConversationStore implements ConversationStore {
       .find({
         conversationId: id,
         expiresAt: { $gt: new Date() },
-        ...(contextOnly ? { status: 'completed' as const, retainInContext: true } : {}),
+        ...(contextOnly
+          ? { status: 'completed' as const, retainInContext: true }
+          : {}),
       })
       .sort({ createdAt: -1, _id: -1 })
       .skip(offset)

@@ -1,10 +1,15 @@
-import type { AIMessage, AIMessageChunk, BaseMessage } from '@langchain/core/messages';
+import type {
+  AIMessage,
+  AIMessageChunk,
+  BaseMessage,
+} from '@langchain/core/messages';
 import { tool } from '@langchain/core/tools';
 import { ChatGoogle } from '@langchain/google/node';
 import { ChatError, draftSchema } from '../chat/contracts.js';
 import { searchSchema, sectionSchema } from '../knowledge/stub.js';
 import type { ChatConfig } from './config.js';
 import { logger } from '../observability/logger.js';
+import { providerMessages } from '../privacy/provider.js';
 
 export type ModelReply = AIMessage | AIMessageChunk;
 export interface AgentModel {
@@ -43,12 +48,15 @@ export function createGeminiModel(config: ChatConfig): AgentModel {
   return {
     async invoke(messages, signal, options = {}) {
       signal.throwIfAborted();
+      const protectedMessages = providerMessages(messages);
       if (!config.apiKey || !config.model) {
-        logger.warn('gemini.configuration.missing', { errorCode: 'GEMINI_NOT_CONFIGURED' });
+        logger.warn('gemini.configuration.missing', {
+          errorCode: 'GEMINI_NOT_CONFIGURED',
+        });
         throw new ChatError(
           503,
           'GEMINI_NOT_CONFIGURED',
-          'Cần GEMINI_API_KEY và GEMINI_MODEL trong .env để gọi Gemini.',
+          'Mình chưa sẵn sàng trả lời câu hỏi này. Bạn vui lòng thử lại sau nhé.',
         );
       }
       try {
@@ -58,10 +66,22 @@ export function createGeminiModel(config: ChatConfig): AgentModel {
           maxRetries: 0,
           maxOutputTokens: config.maxOutputTokens,
           safetySettings: [
-            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+            {
+              category: 'HARM_CATEGORY_HARASSMENT',
+              threshold: 'BLOCK_MEDIUM_AND_ABOVE',
+            },
+            {
+              category: 'HARM_CATEGORY_HATE_SPEECH',
+              threshold: 'BLOCK_MEDIUM_AND_ABOVE',
+            },
+            {
+              category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+              threshold: 'BLOCK_MEDIUM_AND_ABOVE',
+            },
+            {
+              category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+              threshold: 'BLOCK_MEDIUM_AND_ABOVE',
+            },
           ],
         });
         // Gemini's default AUTO mode may answer in plain text, which the graph must reject because it
@@ -71,7 +91,10 @@ export function createGeminiModel(config: ChatConfig): AgentModel {
           modelTools.filter((item) => item.name === 'submit_answer'),
           { tool_choice: 'any' },
         );
-        const result = await (options.final ? finalOnly : bound).invoke(messages, { signal });
+        const result = await (options.final ? finalOnly : bound).invoke(
+          protectedMessages,
+          { signal },
+        );
         signal.throwIfAborted();
         return result;
       } catch (error) {
@@ -93,7 +116,7 @@ export function createGeminiModel(config: ChatConfig): AgentModel {
         throw new ChatError(
           503,
           'GEMINI_UNAVAILABLE',
-          'Chưa hoàn tất được yêu cầu với Gemini. Kiểm tra model/quota hoặc thử lại sau.',
+          'Mình đang gặp trục trặc nên chưa trả lời được. Bạn thử lại sau một chút nhé.',
         );
       }
     },

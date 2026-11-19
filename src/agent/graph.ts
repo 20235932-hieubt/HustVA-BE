@@ -14,14 +14,7 @@ import {
   type ChatResult,
   type StudentContext,
 } from '../chat/contracts.js';
-import {
-  checkInput,
-  fallback,
-  hasSecret,
-  normalize,
-  redactPersonalData,
-  validateDraft,
-} from '../guardrails/policy.js';
+import { checkInput, fallback, validateDraft } from '../guardrails/policy.js';
 import {
   searchSchema,
   sectionSchema,
@@ -33,6 +26,8 @@ import type { ChatConfig } from './config.js';
 import type { AgentModel, ModelReply } from './model.js';
 import { systemPrompt } from './prompts.js';
 import { logger } from '../observability/logger.js';
+import { currentPrivacy, publicContext } from '../privacy/session.js';
+import { publicSearchQuery, publicToolResult } from '../privacy/provider.js';
 
 export interface AgentInput {
   message: string;
@@ -60,37 +55,33 @@ const limited = (reason: string) => {
   );
 };
 
-export function createChatAgent(model: AgentModel, knowledge: KnowledgePort, config: ChatConfig) {
+export function createChatAgent(
+  model: AgentModel,
+  knowledge: KnowledgePort,
+  config: ChatConfig,
+) {
   const builder = new StateGraph(State)
     .addNode('guard', (state) => {
-      const screen = checkInput(state.input.message);
+      const screen = checkInput(state.input.message, currentPrivacy());
       logger.debug('agent.guard.checked', {
         status: screen.result?.status,
         reasonCode: screen.result?.reasonCode,
       });
       // Context is also untrusted input, not an instruction with system authority.
-      for (const value of Object.values(state.input.context)) {
-        if (
-          hasSecret(value) ||
-          redactPersonalData(value) !== normalize(value) ||
-          checkInput(value).result?.status === 'blocked'
-        )
-          throw new ChatError(
-            400,
-            'CONTEXT_UNSAFE',
-            'Context chỉ nhận khóa, chương trình và năm học; không gửi định danh hoặc thông tin xác thực.',
-          );
-      }
+      const context = publicContext(state.input.context);
       const history = state.input.history
         .slice(-10)
-        .flatMap((turn) => [new HumanMessage(turn.user), new AIMessage(turn.answer)]);
+        .flatMap((turn) => [
+          new HumanMessage(turn.user),
+          new AIMessage(turn.answer),
+        ]);
       return {
         result: screen.result,
         messages: [
           new SystemMessage(systemPrompt),
           ...history,
           new HumanMessage(
-            JSON.stringify({ message: screen.message, context: state.input.context }),
+            JSON.stringify({ message: screen.message, context }),
           ),
         ],
       };
@@ -101,8 +92,13 @@ export function createChatAgent(model: AgentModel, knowledge: KnowledgePort, con
       // Conservative estimate, not exact token counting. Bytes overcount Vietnamese 2-3x (each
       // accented letter is 2-3 UTF-8 bytes) and exhausted the budget as soon as real evidence
       // arrived; Gemini averages ~3-4 characters per token, so characters / 2 still over-reserves.
-      const reserve = Math.ceil(JSON.stringify(state.messages).length / 2) + config.maxOutputTokens;
-      if (state.modelCalls >= config.maxModelCalls || state.tokens + reserve > config.maxTurnTokens)
+      const reserve =
+        Math.ceil(JSON.stringify(state.messages).length / 2) +
+        config.maxOutputTokens;
+      if (
+        state.modelCalls >= config.maxModelCalls ||
+        state.tokens + reserve > config.maxTurnTokens
+      )
         return { result: limited('MODEL_BUDGET') };
       const started = performance.now();
       logger.info('agent.model.started', { modelCalls: state.modelCalls + 1 });
@@ -111,7 +107,8 @@ export function createChatAgent(model: AgentModel, knowledge: KnowledgePort, con
         // Last allowed model call: ask for the answer instead of letting the model plan another
         // lookup that the tools node would refuse (the turn would end with TOOL_BUDGET).
         const final =
-          state.toolRounds >= config.maxToolRounds || state.modelCalls + 1 >= config.maxModelCalls;
+          state.toolRounds >= config.maxToolRounds ||
+          state.modelCalls + 1 >= config.maxModelCalls;
         response = await model.invoke(
           final
             ? [
@@ -129,7 +126,8 @@ export function createChatAgent(model: AgentModel, knowledge: KnowledgePort, con
         const fields = {
           durationMs: performance.now() - started,
           modelCalls: state.modelCalls + 1,
-          errorCode: error instanceof ChatError ? error.code : 'MODEL_CALL_FAILED',
+          errorCode:
+            error instanceof ChatError ? error.code : 'MODEL_CALL_FAILED',
         };
         if (signal.aborted) logger.warn('agent.model.aborted', fields);
         else logger.error('agent.model.failed', fields);
@@ -137,7 +135,8 @@ export function createChatAgent(model: AgentModel, knowledge: KnowledgePort, con
       }
       const reported = response.usage_metadata?.total_tokens;
       const tokens =
-        state.tokens + (Number.isFinite(reported) && reported! >= 0 ? reported! : reserve);
+        state.tokens +
+        (Number.isFinite(reported) && reported! >= 0 ? reported! : reserve);
       logger.info('agent.model.completed', {
         durationMs: performance.now() - started,
         modelCalls: state.modelCalls + 1,
@@ -145,9 +144,15 @@ export function createChatAgent(model: AgentModel, knowledge: KnowledgePort, con
         tokens,
       });
       if (tokens > config.maxTurnTokens)
-        return { result: limited('TOKEN_BUDGET'), tokens, modelCalls: state.modelCalls + 1 };
+        return {
+          result: limited('TOKEN_BUDGET'),
+          tokens,
+          modelCalls: state.modelCalls + 1,
+        };
       if (response.invalid_tool_calls?.length || !response.tool_calls?.length) {
-        logger.warn('agent.model.output_rejected', { reasonCode: 'MODEL_OUTPUT_INVALID' });
+        logger.warn('agent.model.output_rejected', {
+          reasonCode: 'MODEL_OUTPUT_INVALID',
+        });
         return {
           tokens,
           modelCalls: state.modelCalls + 1,
@@ -158,7 +163,11 @@ export function createChatAgent(model: AgentModel, knowledge: KnowledgePort, con
           ),
         };
       }
-      return { messages: [...state.messages, response], tokens, modelCalls: state.modelCalls + 1 };
+      return {
+        messages: [...state.messages, response],
+        tokens,
+        modelCalls: state.modelCalls + 1,
+      };
     })
     .addNode('tools', async (state, runtime) => {
       const signal = runtime.signal!;
@@ -170,9 +179,13 @@ export function createChatAgent(model: AgentModel, knowledge: KnowledgePort, con
         // A valid draft sent alongside other tool calls is still judged on its own: validateDraft
         // only accepts evidence already granted, so the unexecuted calls cannot add citations.
         if (calls.length > 1)
-          logger.warn('guardrail.draft.extra_calls_ignored', { proposedToolCalls: calls.length });
+          logger.warn('guardrail.draft.extra_calls_ignored', {
+            proposedToolCalls: calls.length,
+          });
         if (!parsed.success) {
-          logger.warn('guardrail.draft.rejected', { reasonCode: 'DRAFT_INVALID' });
+          logger.warn('guardrail.draft.rejected', {
+            reasonCode: 'DRAFT_INVALID',
+          });
           return {
             result: reply(
               'insufficient_evidence',
@@ -181,7 +194,11 @@ export function createChatAgent(model: AgentModel, knowledge: KnowledgePort, con
             ),
           };
         }
-        const result = validateDraft(parsed.data, state.evidence);
+        const result = validateDraft(
+          parsed.data,
+          state.evidence,
+          currentPrivacy(),
+        );
         logger.info('guardrail.draft.validated', {
           tool: 'submit_answer',
           status: result.status,
@@ -205,7 +222,8 @@ export function createChatAgent(model: AgentModel, knowledge: KnowledgePort, con
         const started = performance.now();
         logger.info('agent.tool.started', {
           tool: call.name,
-          toolCalls: state.toolCalls + messages.length - state.messages.length + 1,
+          toolCalls:
+            state.toolCalls + messages.length - state.messages.length + 1,
         });
         let output: unknown = { status: 'invalid_tool', evidence: [] };
         // Schema/allowlist gate: the model only proposes calls, the backend decides what runs.
@@ -213,9 +231,16 @@ export function createChatAgent(model: AgentModel, knowledge: KnowledgePort, con
           if (call.name === 'search_knowledge') {
             const parsed = searchSchema.safeParse(call.args);
             output = parsed.success
-              ? await knowledge.search(parsed.data, signal, {
-                  cohort: state.input.context.cohort,
-                })
+              ? await knowledge.search(
+                  {
+                    ...parsed.data,
+                    query: publicSearchQuery(parsed.data.query),
+                  },
+                  signal,
+                  {
+                    cohort: state.input.context.cohort,
+                  },
+                )
               : { status: 'invalid_arguments', evidence: [] };
           } else if (call.name === 'read_document_section') {
             const parsed = sectionSchema.safeParse(call.args);
@@ -226,7 +251,9 @@ export function createChatAgent(model: AgentModel, knowledge: KnowledgePort, con
                 : {
                     status: 'not_granted',
                     evidence: [],
-                    warnings: ['Chỉ đọc thêm được evidenceId đã trả về trong lượt này.'],
+                    warnings: [
+                      'Chỉ đọc thêm được evidenceId đã trả về trong lượt này.',
+                    ],
                   };
           }
         } catch (error) {
@@ -238,17 +265,22 @@ export function createChatAgent(model: AgentModel, knowledge: KnowledgePort, con
           throw error;
         }
         signal.throwIfAborted();
+        output = publicToolResult(output, true);
         const metadata = output as { status?: unknown; evidence?: unknown };
         logger.info('agent.tool.completed', {
           tool: call.name,
           durationMs: performance.now() - started,
-          status: typeof metadata?.status === 'string' ? metadata.status : undefined,
-          evidenceCount: Array.isArray(metadata?.evidence) ? metadata.evidence.length : 0,
+          status:
+            typeof metadata?.status === 'string' ? metadata.status : undefined,
+          evidenceCount: Array.isArray(metadata?.evidence)
+            ? metadata.evidence.length
+            : 0,
         });
         for (const item of (output as Partial<KnowledgeResult>).evidence ?? [])
           evidence[item.id] = item;
         const payload = JSON.stringify(output);
-        if (payload.length > 8000) return { result: limited('TOOL_OUTPUT_BUDGET') };
+        if (payload.length > 8000)
+          return { result: limited('TOOL_OUTPUT_BUDGET') };
         messages.push(
           new ToolMessage({
             content: payload,
@@ -270,10 +302,36 @@ export function createChatAgent(model: AgentModel, knowledge: KnowledgePort, con
     .addConditionalEdges('agent', (state) => (state.result ? END : 'tools'))
     .addConditionalEdges('tools', (state) => (state.result ? END : 'agent'));
   const graph = builder.compile();
-  return async (input: AgentInput, signal: AbortSignal): Promise<ChatResult> => {
+  return async (
+    input: AgentInput,
+    signal: AbortSignal,
+  ): Promise<ChatResult> => {
+    const privacy = currentPrivacy();
+    signal.throwIfAborted();
+    const context = publicContext(input.context);
+    const screen = checkInput(input.message, privacy);
+    if (screen.result) {
+      logger.info('guardrail.input.resolved', {
+        status: screen.result.status,
+        reasonCode: screen.result.reasonCode,
+      });
+      return screen.result;
+    }
+    // Preserve the question's meaning for retrieval while masking detected PII.
+    // External tracing remains disabled by currentPrivacy().
+    const message = privacy.pseudonymize(input.message);
+    privacy.seal();
+    const protectedInput: AgentInput = {
+      message,
+      context,
+      history: input.history.slice(-10).map((turn) => ({
+        user: privacy.pseudonymize(turn.user),
+        answer: privacy.pseudonymize(turn.answer),
+      })),
+    };
     const state = await graph.invoke(
       {
-        input,
+        input: protectedInput,
         messages: [],
         result: undefined,
         modelCalls: 0,

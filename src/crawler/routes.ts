@@ -1,4 +1,5 @@
 import express from 'express';
+import { readHttpConfig } from '../http-config.js';
 import {
   CrawlStore,
   sources,
@@ -26,9 +27,11 @@ export function createCrawlerRouter(
       const origin = req.get('origin');
       if (
         origin &&
-        ![`http://${req.get('host')}`, process.env.WEB_ORIGIN ?? 'http://localhost:3000'].includes(
-          origin,
-        )
+        ![
+          `${req.protocol}://${req.get('host')}`,
+          readHttpConfig().apiOrigin,
+          readHttpConfig().webOrigin,
+        ].includes(origin)
       ) {
         res.status(403).json({ error: 'Origin không được phép' });
         return;
@@ -37,7 +40,8 @@ export function createCrawlerRouter(
         req.path === '/crawl' &&
         typeof req.query.sourceId === 'string' &&
         !req.headers['transfer-encoding'] &&
-        (!req.headers['content-length'] || req.headers['content-length'] === '0');
+        (!req.headers['content-length'] ||
+          req.headers['content-length'] === '0');
       if (!queryOnlyCrawl && !req.is('application/json')) {
         res.status(415).json({ error: 'Cần Content-Type: application/json' });
         return;
@@ -61,7 +65,9 @@ export function createCrawlerRouter(
       release = await store.acquireCrawler();
     } catch (error) {
       if ((error as Error).message.includes('đang')) {
-        res.status(409).json({ error: 'Đang có yêu cầu crawl khác; chờ hoàn tất rồi gọi lại.' });
+        res.status(409).json({
+          error: 'Đang có yêu cầu crawl khác; chờ hoàn tất rồi gọi lại.',
+        });
       } else next(error);
       return;
     }
@@ -137,10 +143,13 @@ export function createCrawlerRouter(
       return;
     }
     await store.cancelRun(run.id);
-    res.status(202).json({ message: 'Crawler sẽ dừng sau khi xử lý URL hiện tại.' });
+    res
+      .status(202)
+      .json({ message: 'Crawler sẽ dừng sau khi xử lý URL hiện tại.' });
   });
   router.get('/documents', async (req, res) => {
-    const runId = typeof req.query.runId === 'string' ? req.query.runId : undefined;
+    const runId =
+      typeof req.query.runId === 'string' ? req.query.runId : undefined;
     if (runId && !(await store.getRun(runId))) {
       res.status(404).json({ error: 'Không tìm thấy lượt crawl' });
       return;
@@ -154,7 +163,9 @@ export function createCrawlerRouter(
       !Number.isInteger(offset) ||
       offset < 0
     ) {
-      res.status(400).json({ error: 'limit: 1–100; offset: số nguyên không âm' });
+      res
+        .status(400)
+        .json({ error: 'limit: 1–100; offset: số nguyên không âm' });
       return;
     }
     const documents = await store.documents(runId);
@@ -198,7 +209,8 @@ export function createCrawlerRouter(
       res.status(400).json({ error: 'format: json, jsonl hoặc txt' });
       return;
     }
-    const runId = typeof req.query.runId === 'string' ? req.query.runId : undefined;
+    const runId =
+      typeof req.query.runId === 'string' ? req.query.runId : undefined;
     if (runId && !(await store.getRun(runId))) {
       res.status(404).json({ error: 'Không tìm thấy lượt crawl' });
       return;
@@ -220,16 +232,25 @@ export function createCrawlerRouter(
           (documents.length ? '\n' : ''),
       );
   });
-  router.use((_req, res) => res.status(404).json({ error: 'Endpoint crawler không tồn tại' }));
+  router.use((_req, res) =>
+    res.status(404).json({ error: 'Endpoint crawler không tồn tại' }),
+  );
   router.use(
-    (error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    (
+      error: Error,
+      _req: express.Request,
+      res: express.Response,
+      _next: express.NextFunction,
+    ) => {
       void _next;
       if (error.message.includes('ID không hợp lệ')) {
         res.status(400).json({ error: error.message });
         return;
       }
       console.error('Crawler API:', error.message);
-      res.status(500).json({ error: 'Không thể xử lý dữ liệu crawler; xem log API' });
+      res
+        .status(500)
+        .json({ error: 'Không thể xử lý dữ liệu crawler; xem log API' });
     },
   );
   return router;

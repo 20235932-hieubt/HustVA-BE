@@ -17,7 +17,11 @@ export interface CrawlDocument {
   title: string;
   text: string;
   blocks: Block[];
-  links?: { url: string; title: string; kind: 'pdf' | 'page' | 'image' | 'file' }[];
+  links?: {
+    url: string;
+    title: string;
+    kind: 'pdf' | 'page' | 'image' | 'file';
+  }[];
   contentHash: string;
   rawHash: string;
   extractorVersion: string;
@@ -55,7 +59,8 @@ export interface PageResult {
 export interface CrawlRun {
   id: string;
   sourceId: string;
-  status: 'queued' | 'running' | 'completed' | 'partial' | 'failed' | 'cancelled';
+  status:
+    'queued' | 'running' | 'completed' | 'partial' | 'failed' | 'cancelled';
   createdAt: string;
   updatedAt: string;
   finishedAt: string | null;

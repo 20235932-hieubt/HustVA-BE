@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const policyVersion = 'hustva-ctsv-v1';
+export const policyVersion = 'hustva-ctsv-v2';
 export const contextSchema = z.strictObject({
   cohort: z.string().trim().min(1).max(40).optional(),
   program: z.string().trim().min(1).max(120).optional(),
@@ -37,7 +37,15 @@ export const draftSchema = z.strictObject({
       }),
     )
     .max(5),
-  missingFields: z.array(z.enum(['topic', 'cohort', 'program', 'academicYear', 'purpose'])).max(3),
+  missingFields: z
+    .array(z.enum(['topic', 'cohort', 'program', 'academicYear', 'purpose']))
+    .max(3),
+  entityRefs: z
+    .array(
+      z.string().regex(/^\[\[PII_(?:EMAIL|PHONE|ID|NAME)_[a-f0-9]{32}\]\]$/u),
+    )
+    .max(8)
+    .optional(),
 });
 
 export type StudentContext = z.infer<typeof contextSchema>;
@@ -60,7 +68,7 @@ export interface ChatResult {
   warnings: string[];
   policyVersion: string;
   /** `rag`: answers come only from retrieved, cited passages. `stub`: no knowledge base wired in. */
-  retrievalMode: 'stub' | 'rag';
+  retrievalMode: 'stub' | 'rag' | 'hust_api';
 }
 export interface ChatTurn {
   requestId: string;

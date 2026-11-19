@@ -28,7 +28,8 @@ export interface Evidence {
   score?: number;
 }
 export interface KnowledgeResult {
-  status: 'not_implemented' | 'empty' | 'results' | 'unavailable' | 'not_granted';
+  status:
+    'not_implemented' | 'empty' | 'results' | 'unavailable' | 'not_granted';
   evidence: Evidence[];
   warnings: string[];
 }
@@ -42,7 +43,10 @@ export interface KnowledgePort {
     signal: AbortSignal,
     scope?: SearchScope,
   ): Promise<KnowledgeResult>;
-  read(input: z.infer<typeof sectionSchema>, signal: AbortSignal): Promise<KnowledgeResult>;
+  read(
+    input: z.infer<typeof sectionSchema>,
+    signal: AbortSignal,
+  ): Promise<KnowledgeResult>;
 }
 
 /** Kept for tests and for running the chat without the embedding service wired in. */
@@ -58,7 +62,10 @@ export class StubKnowledge implements KnowledgePort {
       warnings: ['Retrieval chưa được triển khai.'],
     };
   }
-  async read(_input: z.infer<typeof sectionSchema>, signal: AbortSignal): Promise<KnowledgeResult> {
+  async read(
+    _input: z.infer<typeof sectionSchema>,
+    signal: AbortSignal,
+  ): Promise<KnowledgeResult> {
     signal.throwIfAborted();
     return {
       status: 'not_implemented',
