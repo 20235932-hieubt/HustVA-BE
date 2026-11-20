@@ -1,0 +1,7 @@
+# Tested with Python 3.12 (uv venv) on Apple M4 / MPS, see README.md.
+# Separate venv from services/embedding: laya needs transformers 5.x, embedding pins 4.x.
+laya==0.5.0
+torch==2.15.0
+transformers==5.23.0
+fastapi==0.165.0
+uvicorn[standard]==0.54.0
