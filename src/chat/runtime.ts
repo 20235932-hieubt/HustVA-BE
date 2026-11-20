@@ -13,6 +13,8 @@ import { getToolManager } from '../tools/runtime.js';
 import { createRoutingModel, createToolSelector } from '../tools/selector.js';
 import { MongoStudentSubjectStore } from './student-subject-repository.js';
 import { MongoResearchLookupStore } from './research-target-repository.js';
+import { readSystemOneConfig } from '../system-one/config.js';
+import { createSystemOneTurn } from '../system-one/turn.js';
 
 export const chatShutdown = new AbortController();
 let pending: Promise<ChatService> | undefined;
@@ -30,6 +32,8 @@ export function getChatService(): Promise<ChatService> {
     logger.info('chat.runtime.initializing');
     try {
       const config = readChatConfig();
+      // Fail-open: an invalid SYSTEM_ONE_* config turns System One off.
+      const systemOne = createSystemOneTurn(readSystemOneConfig());
       connection = createMongoConnection(readMongoConfig());
       await connection.client.connect();
       const store = new MongoConversationStore(connection.db);
@@ -74,6 +78,7 @@ export function getChatService(): Promise<ChatService> {
             }
           : undefined,
         config.multiTurnToolsEnabled,
+        systemOne,
       );
     } catch {
       logger.error('chat.runtime.failed', {

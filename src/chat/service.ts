@@ -6,6 +6,7 @@ import { performance } from 'node:perf_hooks';
 import type { AgentInput } from '../agent/graph.js';
 import { runChatTool, type ChatTools } from '../tools/chat.js';
 import type { ToolSelector } from '../tools/selector.js';
+import type { SystemOneTurn } from '../system-one/turn.js';
 import { addTraceContext, logger, withTrace } from '../observability/logger.js';
 import { checkInput, hasSecret, normalize } from '../guardrails/policy.js';
 import { isGradeTool } from '../tools/grades.js';
@@ -102,6 +103,8 @@ export class ChatService {
       | ({ enabled: boolean; store: ResearchLookupStore } & ToolBudget)
       | undefined = undefined,
     private readonly multiTurnToolsEnabled = false,
+    /** Undefined when System One is off: the old path runs unchanged. */
+    private readonly systemOne?: SystemOneTurn,
   ) {}
   async create(principal?: DemoPrincipal) {
     await principal?.validate();
@@ -221,6 +224,13 @@ export class ChatService {
     } finally {
       privacy.dispose();
     }
+  }
+  /** Status of the latest completed turn other than the current request. */
+  private async previousStatus(id: string, requestId: string) {
+    const [previous] = (await this.store.list(id, 2, 0)).filter(
+      (turn) => turn.requestId !== requestId,
+    );
+    return previous?.result?.status;
   }
   private async processMessage(
     id: string,
@@ -494,8 +504,33 @@ export class ChatService {
                 'HUST_SUBJECT_RECORDED',
               )
             : undefined;
+      // System One input gate (site a): may answer before tool routing.
+      // Skipped when an earlier check already answered or a tool request is
+      // pending, so follow-up replies always reach the selector.
+      const gateOutcome =
+        screen.result || subjectResult || pendingTool || !this.systemOne
+          ? undefined
+          : await abortable(
+              this.systemOne.beforeRouting(
+                {
+                  message: safeMessage,
+                  previousStatus: await this.previousStatus(
+                    id,
+                    input.requestId,
+                  ),
+                },
+                signal,
+              ),
+              signal,
+            );
+      // Signed-in demo accounts may look up their own data: fail open to routing.
+      const gate =
+        principal && gateOutcome?.result.status === 'requires_authentication'
+          ? undefined
+          : gateOutcome;
+      if (gate) record.retainInContext = gate.retainInContext;
       const toolPlan =
-        !subjectResult && routingMessage !== undefined && this.selector
+        !subjectResult && !gate && routingMessage !== undefined && this.selector
           ? await abortable(
               this.selector.select(
                 routingMessage,
@@ -574,6 +609,7 @@ export class ChatService {
       const result =
         screen.result ??
         subjectResult ??
+        gate?.result ??
         continuationAuth ??
         examFallback ??
         gradeFallback ??
@@ -710,7 +746,9 @@ export class ChatService {
       // Context from blocked/support messages must not poison later turns.
       await this.store.complete(
         record,
-        screen.retainUser ? mergedContext : publicContext(conversation.context),
+        (gate?.retainUser ?? screen.retainUser)
+          ? mergedContext
+          : publicContext(conversation.context),
         storedResult,
       );
       if (isPrivateTool(toolPlan?.id ?? '')) await principal?.validate();
