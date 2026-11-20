@@ -16,3 +16,7 @@ coverage/
 .local/
 .docs/
 /docs/
+playground/
+evals/cau-hoi-kiem-thu.csv
+evals/data/
+evals/runs/
