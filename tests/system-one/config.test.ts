@@ -16,6 +16,13 @@ const ALL_SITES_ON = {
   SYSTEM_ONE_RELEVANCE: 'true',
 };
 
+const ACCOUNT = '0123456789abcdef0123456789abcdef';
+const CLEF = {
+  SYSTEM_ONE_PROVIDER: 'clef',
+  SYSTEM_ONE_CLEF_API_TOKEN: 'cf-token',
+  SYSTEM_ONE_CLEF_ACCOUNT_ID: ACCOUNT,
+};
+
 function capture() {
   const events: { event: string; fields?: LogFields }[] = [];
   return {
@@ -92,10 +99,10 @@ describe('readSystemOneConfig', () => {
     assert.equal(hasActiveSite(config), false);
   });
 
-  test('strips trailing slashes and accepts a custom timeout', () => {
+  test('laya: strips trailing slashes and accepts a custom timeout', () => {
     const { config } = read({
       SYSTEM_ONE_MODE: 'on',
-      SYSTEM_ONE_URL: 'http://localhost:9000//',
+      SYSTEM_ONE_LAYA_URL: 'http://localhost:9000//',
       SYSTEM_ONE_TIMEOUT_MS: '800',
     });
 
@@ -103,11 +110,23 @@ describe('readSystemOneConfig', () => {
     assert.equal(config.timeoutMs, 800);
   });
 
+  test('laya ignores keys of the other providers', () => {
+    const { config } = read({
+      SYSTEM_ONE_MODE: 'on',
+      SYSTEM_ONE_CLEF_API_TOKEN: 'cf-token',
+      SYSTEM_ONE_CLEF_ACCOUNT_ID: ACCOUNT,
+    });
+
+    assert.equal(config.provider, 'laya');
+    assert.equal(config.apiKey, undefined);
+    assert.equal(config.model, undefined);
+  });
+
   test('jev defaults to the TypeSafe URL and jev-latest with a key', () => {
     const { config } = read({
       SYSTEM_ONE_MODE: 'on',
       SYSTEM_ONE_PROVIDER: 'jev',
-      SYSTEM_ONE_API_KEY: 'k',
+      SYSTEM_ONE_JEV_API_KEY: 'k',
     });
 
     assert.equal(config.provider, 'jev');
@@ -116,16 +135,37 @@ describe('readSystemOneConfig', () => {
     assert.equal(config.apiKey, 'k');
   });
 
-  test('clef needs an explicit https URL and defaults to clef-flash', () => {
-    const { config } = read({
-      SYSTEM_ONE_MODE: 'on',
-      SYSTEM_ONE_PROVIDER: 'clef',
-      SYSTEM_ONE_API_KEY: 'k',
-      SYSTEM_ONE_URL: 'https://api.cloudflare.com/client/v4/x',
-    });
+  test('clef builds the Workers AI URL from account id and defaults to clef-flash', () => {
+    const { config } = read({ SYSTEM_ONE_MODE: 'on', ...CLEF });
 
     assert.equal(config.provider, 'clef');
     assert.equal(config.model, 'clef-flash');
+    assert.equal(config.apiKey, 'cf-token');
+    assert.equal(
+      config.url,
+      `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/ai/run/@cf/cloudflare/clef-flash`,
+    );
+  });
+
+  test('clef can select the larger clef model', () => {
+    const { config } = read({
+      SYSTEM_ONE_MODE: 'on',
+      ...CLEF,
+      SYSTEM_ONE_CLEF_MODEL: 'clef',
+    });
+
+    assert.equal(config.model, 'clef');
+    assert.ok(config.url.endsWith('/ai/run/@cf/cloudflare/clef'));
+  });
+
+  test('switching provider needs only SYSTEM_ONE_PROVIDER', () => {
+    const env = { SYSTEM_ONE_MODE: 'on', ...CLEF };
+
+    assert.equal(
+      read({ ...env, SYSTEM_ONE_PROVIDER: 'laya' }).config.url,
+      'http://127.0.0.1:8002',
+    );
+    assert.equal(read(env).config.provider, 'clef');
   });
 
   const invalid: [string, NodeJS.ProcessEnv][] = [
@@ -134,21 +174,24 @@ describe('readSystemOneConfig', () => {
     ['timeout below 100', { SYSTEM_ONE_TIMEOUT_MS: '50' }],
     ['timeout above 5000', { SYSTEM_ONE_TIMEOUT_MS: '9000' }],
     ['non-integer timeout', { SYSTEM_ONE_TIMEOUT_MS: '1.5' }],
-    ['malformed URL', { SYSTEM_ONE_URL: 'not a url' }],
-    ['non-http URL', { SYSTEM_ONE_URL: 'file:///etc/passwd' }],
+    ['malformed laya URL', { SYSTEM_ONE_LAYA_URL: 'not a url' }],
+    ['non-http laya URL', { SYSTEM_ONE_LAYA_URL: 'file:///etc/passwd' }],
     ['jev without key', { SYSTEM_ONE_PROVIDER: 'jev' }],
     [
       'jev over plain http',
       {
         SYSTEM_ONE_PROVIDER: 'jev',
-        SYSTEM_ONE_API_KEY: 'k',
-        SYSTEM_ONE_URL: 'http://api.typesafe.ai',
+        SYSTEM_ONE_JEV_API_KEY: 'k',
+        SYSTEM_ONE_JEV_URL: 'http://api.typesafe.ai',
       },
     ],
+    ['clef without token', { ...CLEF, SYSTEM_ONE_CLEF_API_TOKEN: '' }],
+    ['clef without account id', { ...CLEF, SYSTEM_ONE_CLEF_ACCOUNT_ID: '' }],
     [
-      'clef without URL',
-      { SYSTEM_ONE_PROVIDER: 'clef', SYSTEM_ONE_API_KEY: 'k' },
+      'clef with a malformed account id',
+      { ...CLEF, SYSTEM_ONE_CLEF_ACCOUNT_ID: '../evil' },
     ],
+    ['clef with an unknown model', { ...CLEF, SYSTEM_ONE_CLEF_MODEL: 'gpt-4' }],
   ];
   for (const [name, env] of invalid)
     test(`${name} turns everything off, logs only a code and does not throw`, () => {
@@ -172,8 +215,8 @@ describe('readSystemOneConfig', () => {
     const { events } = read({
       SYSTEM_ONE_MODE: 'on',
       SYSTEM_ONE_PROVIDER: 'jev',
-      SYSTEM_ONE_API_KEY: 'secret-key-123',
-      SYSTEM_ONE_URL: 'http://plain.example',
+      SYSTEM_ONE_JEV_API_KEY: 'secret-key-123',
+      SYSTEM_ONE_JEV_URL: 'http://plain.example',
     });
 
     assert.equal(events.length, 1);

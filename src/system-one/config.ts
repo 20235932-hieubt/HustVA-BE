@@ -34,15 +34,9 @@ const SITE_ENV: Record<SystemOneSiteName, string> = {
   unitHint: 'SYSTEM_ONE_UNIT_HINT',
   relevance: 'SYSTEM_ONE_RELEVANCE',
 };
-const PROVIDER_DEFAULTS: Record<
-  SystemOneProvider,
-  { url?: string; model?: string; external: boolean }
-> = {
-  laya: { url: 'http://127.0.0.1:8002', external: false },
-  jev: { url: 'https://api.typesafe.ai', model: 'jev-latest', external: true },
-  // The Cloudflare URL embeds the account id, so it has no default.
-  clef: { model: 'clef-flash', external: true },
-};
+const LAYA_DEFAULT_URL = 'http://127.0.0.1:8002';
+const JEV_DEFAULT_URL = 'https://api.typesafe.ai';
+const CLEF_MODELS = ['clef', 'clef-flash'] as const;
 const NO_SITES: SystemOneSites = {
   inputGate: false,
   toolSkip: false,
@@ -55,7 +49,7 @@ const DISABLED: SystemOneConfig = {
   mode: 'off',
   sites: NO_SITES,
   provider: 'laya',
-  url: 'http://127.0.0.1:8002',
+  url: LAYA_DEFAULT_URL,
   timeoutMs: DEFAULT_TIMEOUT_MS,
 };
 
@@ -73,22 +67,70 @@ function readProvider(raw: string | undefined): SystemOneProvider {
   throw new InvalidConfig('SYSTEM_ONE_PROVIDER');
 }
 
-function readUrl(raw: string | undefined, provider: SystemOneProvider) {
-  const value = raw?.trim() || PROVIDER_DEFAULTS[provider].url;
-  if (!value) throw new InvalidConfig('SYSTEM_ONE_URL');
+function readUrl(
+  raw: string | undefined,
+  fallback: string,
+  key: string,
+  external: boolean,
+) {
+  const value = raw?.trim() || fallback;
   let url: URL;
   try {
     url = new URL(value);
   } catch {
-    throw new InvalidConfig('SYSTEM_ONE_URL');
+    throw new InvalidConfig(key);
   }
   // A bearer key and student messages must not travel in clear text.
-  const allowed = PROVIDER_DEFAULTS[provider].external
-    ? ['https:']
-    : ['http:', 'https:'];
-  if (!allowed.includes(url.protocol))
-    throw new InvalidConfig('SYSTEM_ONE_URL');
+  const allowed = external ? ['https:'] : ['http:', 'https:'];
+  if (!allowed.includes(url.protocol)) throw new InvalidConfig(key);
   return value.replace(/\/+$/u, '');
+}
+
+function required(env: NodeJS.ProcessEnv, key: string) {
+  const value = env[key]?.trim();
+  if (!value) throw new InvalidConfig(key);
+  return value;
+}
+
+type ProviderSettings = Pick<SystemOneConfig, 'url' | 'model' | 'apiKey'>;
+
+/** Each provider reads only its own variables, so switching is one line and
+ *  a third-party key is never sent to another provider. */
+function readProviderSettings(
+  env: NodeJS.ProcessEnv,
+  provider: SystemOneProvider,
+): ProviderSettings {
+  if (provider === 'laya')
+    return {
+      url: readUrl(
+        env.SYSTEM_ONE_LAYA_URL,
+        LAYA_DEFAULT_URL,
+        'SYSTEM_ONE_LAYA_URL',
+        false,
+      ),
+    };
+  if (provider === 'jev')
+    return {
+      url: readUrl(
+        env.SYSTEM_ONE_JEV_URL,
+        JEV_DEFAULT_URL,
+        'SYSTEM_ONE_JEV_URL',
+        true,
+      ),
+      model: env.SYSTEM_ONE_JEV_MODEL?.trim() || 'jev-latest',
+      apiKey: required(env, 'SYSTEM_ONE_JEV_API_KEY'),
+    };
+  const accountId = required(env, 'SYSTEM_ONE_CLEF_ACCOUNT_ID');
+  if (!/^[0-9a-f]{32}$/u.test(accountId))
+    throw new InvalidConfig('SYSTEM_ONE_CLEF_ACCOUNT_ID');
+  const model = env.SYSTEM_ONE_CLEF_MODEL?.trim() || 'clef-flash';
+  if (!(CLEF_MODELS as readonly string[]).includes(model))
+    throw new InvalidConfig('SYSTEM_ONE_CLEF_MODEL');
+  return {
+    url: `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/cloudflare/${model}`,
+    model,
+    apiKey: required(env, 'SYSTEM_ONE_CLEF_API_TOKEN'),
+  };
 }
 
 function readTimeout(raw: string | undefined) {
@@ -114,17 +156,11 @@ function parse(env: NodeJS.ProcessEnv): SystemOneConfig {
   const mode = readMode(env.SYSTEM_ONE_MODE);
   if (mode === 'off') return DISABLED;
   const provider = readProvider(env.SYSTEM_ONE_PROVIDER);
-  const defaults = PROVIDER_DEFAULTS[provider];
-  const apiKey = env.SYSTEM_ONE_API_KEY?.trim() || undefined;
-  if (defaults.external && !apiKey)
-    throw new InvalidConfig('SYSTEM_ONE_API_KEY');
   return {
     mode,
     sites: readSites(env),
     provider,
-    url: readUrl(env.SYSTEM_ONE_URL, provider),
-    model: env.SYSTEM_ONE_MODEL?.trim() || defaults.model,
-    apiKey,
+    ...readProviderSettings(env, provider),
     timeoutMs: readTimeout(env.SYSTEM_ONE_TIMEOUT_MS),
   };
 }
