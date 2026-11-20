@@ -17,6 +17,7 @@ export type SystemOneAnswer =
 export interface ParsedDecision {
   answers: Record<string, SystemOneAnswer>;
   truncated: boolean;
+  inputTokens?: number;
 }
 
 const probability = z.number().min(0).max(1);
@@ -32,7 +33,12 @@ const rawAnswer = z.union([
 ]);
 const rawResponse = z.object({
   answers: z.record(z.string(), z.unknown()),
-  usage: z.object({ truncated: z.boolean().optional() }).optional(),
+  usage: z
+    .object({
+      truncated: z.boolean().optional(),
+      input_tokens: z.number().int().min(0).optional(),
+    })
+    .optional(),
 });
 
 function normalizeAnswer(
@@ -73,5 +79,10 @@ export function normalizeDecision(
     if (!answer) return null;
     answers[id] = answer;
   }
-  return { answers, truncated: parsed.data.usage?.truncated === true };
+  const inputTokens = parsed.data.usage?.input_tokens;
+  return {
+    answers,
+    truncated: parsed.data.usage?.truncated === true,
+    ...(inputTokens === undefined ? {} : { inputTokens }),
+  };
 }

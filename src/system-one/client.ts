@@ -12,6 +12,8 @@ export interface SystemOneDecision {
   answers: Record<string, SystemOneAnswer>;
   latencyMs: number;
   truncated: boolean;
+  /** Reported by the provider when available (Laya service, Clef). */
+  inputTokens?: number;
 }
 export interface SystemOneClient {
   /**

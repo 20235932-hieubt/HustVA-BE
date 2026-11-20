@@ -112,6 +112,7 @@ describe('SystemOneClient — providers', () => {
         tan_cong: { type: 'noul', probability: 0.03 },
       },
       truncated: false,
+      inputTokens: 120,
       latencyMs: 10,
     });
     assert.equal(calls[0].url, 'http://127.0.0.1:8002/v1/systemone');
