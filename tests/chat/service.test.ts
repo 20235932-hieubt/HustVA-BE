@@ -143,16 +143,28 @@ function fakeClient(answers: () => Record<string, SystemOneAnswer> | null) {
   return { client, states };
 }
 
+function lookup(label: string, p: number): Record<string, SystemOneAnswer> {
+  return {
+    can_tra_cuu: {
+      type: 'choice',
+      choice: label,
+      probabilities: { [label]: p },
+    },
+  };
+}
+
 const silent = { info: () => undefined };
 function turn(
   mode: 'on' | 'shadow',
   answers: () => Record<string, SystemOneAnswer> | null,
+  sites: { inputGate?: boolean; toolSkip?: boolean } = { inputGate: true },
 ) {
   const fake = fakeClient(answers);
   const config = readSystemOneConfig(
     {
       SYSTEM_ONE_MODE: mode,
-      SYSTEM_ONE_INPUT_GATE: 'true',
+      SYSTEM_ONE_INPUT_GATE: String(sites.inputGate ?? false),
+      SYSTEM_ONE_TOOL_SKIP: String(sites.toolSkip ?? false),
       SYSTEM_ONE_PROVIDER: 'laya',
     },
     { warn: () => undefined },
@@ -173,7 +185,9 @@ describe('ChatService with System One off', () => {
     for (const env of [
       {},
       { SYSTEM_ONE_MODE: 'off', SYSTEM_ONE_INPUT_GATE: 'true' },
-      { SYSTEM_ONE_MODE: 'on', SYSTEM_ONE_TOOL_SKIP: 'true' },
+      // Clarify (c) was dropped: its flag alone must not enable anything.
+      { SYSTEM_ONE_MODE: 'on', SYSTEM_ONE_CLARIFY: 'true' },
+      { SYSTEM_ONE_MODE: 'off', SYSTEM_ONE_TOOL_SKIP: 'true' },
       { SYSTEM_ONE_MODE: 'bogus', SYSTEM_ONE_INPUT_GATE: 'true' },
     ]) {
       const config = readSystemOneConfig(env, { warn: () => undefined });
@@ -192,10 +206,23 @@ describe('ChatService with System One off', () => {
   test('shadow and failing System One leave results unchanged', async () => {
     const baseline = harness();
     const expected = await runAll(baseline);
+    const both = { inputGate: true, toolSkip: true };
     for (const variant of [
       turn('shadow', () => gate('out_of_scope', 0.95)),
       turn('on', () => null),
       turn('on', () => gate('academic', 0.9)),
+      turn(
+        'shadow',
+        () => ({ ...gate('academic', 0.9), ...lookup('tai_lieu', 0.95) }),
+        both,
+      ),
+      turn('on', () => null, both),
+      turn(
+        'on',
+        () => ({ ...gate('academic', 0.9), ...lookup('tai_lieu', 0.79) }),
+        both,
+      ),
+      turn('on', () => lookup('giang_vien', 0.95), { toolSkip: true }),
     ]) {
       const h = harness(variant.systemOne);
       assert.deepEqual(await runAll(h), expected);
@@ -262,5 +289,34 @@ describe('ChatService with the input gate on', () => {
     await send(h, 'Nguyễn Văn A', REQUEST_IDS[1], undefined, first);
     assert.equal(fake.states.length, 1);
     assert.equal(h.selectorCalls.length, 2);
+  });
+});
+
+describe('ChatService with tool skip on', () => {
+  test('confident tai_lieu skips the selector, agent answers', async () => {
+    const baseline = harness();
+    const expected = await send(baseline, MESSAGES[0], REQUEST_IDS[0]);
+    const { systemOne } = turn('on', () => lookup('tai_lieu', 0.9), {
+      toolSkip: true,
+    });
+    const h = harness(systemOne);
+    const sent = await send(h, MESSAGES[0], REQUEST_IDS[0]);
+    assert.deepEqual(sent.stable, expected.stable);
+    assert.equal(h.selectorCalls.length, 0);
+    assert.equal(h.agentCalls.length, 1);
+    const [record] = await h.store.list(sent.conversationId, 1, 0);
+    assert.equal(record.retainInContext, true);
+  });
+
+  test('gate action still wins over tool skip', async () => {
+    const { systemOne } = turn(
+      'on',
+      () => ({ ...gate('out_of_scope', 0.9), ...lookup('tai_lieu', 0.95) }),
+      { inputGate: true, toolSkip: true },
+    );
+    const h = harness(systemOne);
+    const sent = await send(h, MESSAGES[4], REQUEST_IDS[0]);
+    assert.equal(sent.stable.reasonCode, 'OUT_OF_SCOPE');
+    assert.equal(h.selectorCalls.length + h.agentCalls.length, 0);
   });
 });

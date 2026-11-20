@@ -504,10 +504,11 @@ export class ChatService {
                 'HUST_SUBJECT_RECORDED',
               )
             : undefined;
-      // System One input gate (site a): may answer before tool routing.
+      // System One before tool routing: the input gate (site a) may answer
+      // the turn; tool skip (site f) may bypass the Gemini tool selector.
       // Skipped when an earlier check already answered or a tool request is
       // pending, so follow-up replies always reach the selector.
-      const gateOutcome =
+      const pre =
         screen.result || subjectResult || pendingTool || !this.systemOne
           ? undefined
           : await abortable(
@@ -525,12 +526,21 @@ export class ChatService {
             );
       // Signed-in demo accounts may look up their own data: fail open to routing.
       const gate =
-        principal && gateOutcome?.result.status === 'requires_authentication'
+        principal && pre?.action?.result.status === 'requires_authentication'
           ? undefined
-          : gateOutcome;
+          : pre?.action;
       if (gate) record.retainInContext = gate.retainInContext;
+      // Deterministic private-lookup cues always reach the selector.
+      const skipTools =
+        pre?.skipTools &&
+        !isGradeLookupRequest(input.message) &&
+        !isExamLookupRequest(input.message);
       const toolPlan =
-        !subjectResult && !gate && routingMessage !== undefined && this.selector
+        !subjectResult &&
+        !gate &&
+        !skipTools &&
+        routingMessage !== undefined &&
+        this.selector
           ? await abortable(
               this.selector.select(
                 routingMessage,

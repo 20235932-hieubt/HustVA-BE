@@ -1,5 +1,6 @@
 // Run chat turns with System One OFF, then ON, and compare.
-//   pnpm tsx evals/demo-system-one.ts [--sites=a] [--stt=114,2] [--gap-ms=8000]
+//   pnpm tsx evals/demo-system-one.ts [--sites=a,f] [--stt=114,2]
+//     [--gap-ms=8000]
 // Uses the real ChatService with an in-memory store (no HTTP, no Mongo).
 // Needs GEMINI_API_KEY, embedding service 8001 + local vectors and the
 // SYSTEM_ONE_* provider settings in .env (SYSTEM_ONE_MODE is ignored).
@@ -39,17 +40,41 @@ import { questionsByStt } from './probe/csv.js';
 process.env.LOG_LEVEL = process.env.DEMO_LOG_LEVEL ?? 'silent';
 
 const CSV = 'evals/cau-hoi-kiem-thu.csv';
-const SUPPORTED_SITES = ['a'];
-// demo-plan mục 4. Only site a exists so far (step 3).
+const SUPPORTED_SITES = ['a', 'f'];
+// demo-plan mục 4. mustPass: the gate must let the turn through;
+// mustKeepSelector: a tool question, site f must not skip the selector.
 const GROUPS = [
   {
     site: 'a',
     name: 'a-chặn',
     mustPass: false,
+    mustKeepSelector: false,
     stts: [114, 116, 118, 119, 99, 105, 137, 1, 96, 125, 126],
   },
-  { site: 'a', name: 'a-đi tiếp', mustPass: true, stts: [2, 127, 135] },
+  {
+    site: 'a',
+    name: 'a-đi tiếp',
+    mustPass: true,
+    mustKeepSelector: false,
+    stts: [2, 127, 135],
+  },
+  {
+    site: 'f',
+    name: 'f-bỏ chọn tool',
+    mustPass: true,
+    mustKeepSelector: false,
+    // 14, 16, 22 from mục 4 plus the other step-2 probe document questions.
+    stts: [14, 16, 22, 23, 37, 41, 75, 92, 17, 29],
+  },
+  {
+    site: 'f',
+    name: 'f-giữ chọn tool',
+    mustPass: true,
+    mustKeepSelector: true,
+    stts: [34, 68, 132, 58],
+  },
 ];
+const SITE_TAG: Record<string, string> = { input_gate: 'a', tool_skip: 'f' };
 
 function arg(name: string): string | undefined {
   return process.argv
@@ -57,7 +82,9 @@ function arg(name: string): string | undefined {
     ?.slice(name.length + 3);
 }
 
-const sites = (arg('sites') ?? 'a').split(',').filter(Boolean);
+const sites = (arg('sites') ?? SUPPORTED_SITES.join(','))
+  .split(',')
+  .filter(Boolean);
 const unsupported = sites.filter((site) => !SUPPORTED_SITES.includes(site));
 if (unsupported.length) {
   console.error(`Vị trí chưa làm: ${unsupported.join(', ')}`);
@@ -69,7 +96,12 @@ const cases = GROUPS.filter((group) => sites.includes(group.site)).flatMap(
   (group) =>
     group.stts
       .filter((stt) => !onlyStt || onlyStt.includes(stt))
-      .map((stt) => ({ stt, group: group.name, mustPass: group.mustPass })),
+      .map((stt) => ({
+        stt,
+        group: group.name,
+        mustPass: group.mustPass,
+        mustKeepSelector: group.mustKeepSelector,
+      })),
 );
 
 const config = readChatConfig();
@@ -111,7 +143,7 @@ const systemOneConfig = readSystemOneConfig(
     ...process.env,
     SYSTEM_ONE_MODE: 'on',
     SYSTEM_ONE_INPUT_GATE: String(sites.includes('a')),
-    SYSTEM_ONE_TOOL_SKIP: 'false',
+    SYSTEM_ONE_TOOL_SKIP: String(sites.includes('f')),
     SYSTEM_ONE_CLARIFY: 'false',
     SYSTEM_ONE_CLAIM_CHECK: 'false',
     SYSTEM_ONE_UNIT_HINT: 'false',
@@ -164,16 +196,26 @@ for (const item of cases) {
   const off = await runOnce(offService, question);
   const before = sink.records.length;
   const on = await runOnce(onService, question);
-  const record = sink.records.slice(before).at(-1);
+  const records = sink.records.slice(before);
+  const acted = (site: string) =>
+    records.some((r) => r.site === site && r.action === 'acted');
+  const latency = records.find((r) => r.latencyMs !== undefined)?.latencyMs;
   rows.push({
     ...item,
     question,
     off,
     on,
-    systemOne: record
-      ? `a:${record.label ?? '—'} ${record.probability?.toFixed(2) ?? '—'} ${record.action}${record.latencyMs === undefined ? '' : ` ${Math.round(record.latencyMs)} ms`}`
+    systemOne: records.length
+      ? [
+          ...records.map(
+            (r) =>
+              `${SITE_TAG[r.site] ?? r.site}:${r.label ?? '—'} ${r.probability?.toFixed(2) ?? '—'} ${r.action}`,
+          ),
+          ...(latency === undefined ? [] : [`${Math.round(latency)} ms`]),
+        ].join(' · ')
       : '— (checkInput đã xử lý)',
-    gateActed: record?.action === 'acted',
+    gateActed: acted('input_gate'),
+    toolSkipped: acted('tool_skip'),
   });
   console.error(`STT ${item.stt} xong`);
 }
