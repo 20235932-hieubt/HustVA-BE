@@ -508,6 +508,68 @@ hồi quy local và dependencies frontend để kiểm tra Markdown/auth transpo
 không thiết lập CI phụ thuộc các file ngoài repo. Kiểm thử mock không thay thế
 xác minh API HUST, Gemini thật hoặc kiểm tra trực quan trên trình duyệt.
 
+## Tra cứu đề tài giảng viên và công ty
+
+Hai tool `get_teacher_research_topics` (`teacher/research-topic`, input strict
+`{"teacherId":"<ID>"}`) và `get_company_research_topics`
+(`company/research-topic`, `{"companyId":"<ID>"}`) lấy dữ liệu công bố dùng chung,
+không cần MSSV hoặc demo login. Credential Partner vẫn chỉ nằm ở backend.
+Management endpoints cần bearer vận hành như các tool khác. ID là string opaque;
+ID số nguyên an toàn từ search được chuyển sang string, giữ số 0 đầu của ID string.
+
+Để bật thử: thêm `CHAT_TOPICS_ENABLED=true` vào `.env`, restart backend, bật
+từng tool đề tài qua trang tools hoặc `PATCH /api/v1/tools/<tool-id>` với
+`{"enabled":true}` và management bearer. Hai tool và cờ chat mặc định tắt.
+Giữ `search_teachers`/`search_companies` bật; hỏi theo tên cần ít nhất 2
+`CHAT_MAX_TOOL_CALLS` và 2 `CHAT_MAX_TOOL_ROUNDS`. Cờ này độc lập grades/exams;
+không phải cờ xác thực sinh viên. Không đưa management token vào chat frontend.
+
+- Hỏi “đề tài của thầy …” hoặc “đề tài thực tập công ty …”: LLM chọn ý định/tên,
+  backend gọi search rồi lấy ID từ response, tối đa hai tool calls logic.
+- Search nhiều kết quả: hỏi chọn từ danh sách (tối đa 10), không chọn dòng đầu.
+  “Người thứ 2”/“thứ hai” chọn đúng batch đang hiển thị; “thầy đó/công ty đó”
+  chỉ tiếp nối đối tượng đã chọn. Chọn từ context cần một tool call topics.
+- Đơn vị giảng viên nêu trong câu được kiểm tra với `schoolName` bằng so khớp
+  text chuẩn hóa; không tự diễn giải tên viết tắt thành tên trường/khoa. Nếu
+  không đối chiếu được thì hỏi lại; không áp bộ lọc này cho công ty.
+- Thiếu tên, yêu cầu tìm đề tài toàn trường theo lĩnh vực hoặc đăng ký đề tài:
+  chưa hỗ trợ. Không dùng đề tài công khai để suy ra sinh viên đang làm đề tài gì.
+
+Model schema dùng tên hoặc opaque target ref, không nhận source ID. Context
+`chat_research_targets` chỉ lưu batch/selected target, ID nguồn, nhãn và expiry;
+TTL tối đa 10 phút và không vượt hạn conversation. Context được kiểm tra
+capability/owner trước đọc/ghi, lease trước save; TTL kiểm tra cả khi đọc và
+được dọn bằng Mongo TTL index. Xóa conversation xóa context. Ref sai phiên,
+hết hạn, khác loại hoặc không khớp lựa chọn phải chọn lại. Không chấp nhận
+lookup state từ public context của client. Không lưu mô tả đề tài trong context.
+
+Kết quả trả Markdown với tiêu đề/mô tả ngắn và các field theo nguồn, không
+gọi model để viết lại. Tối đa 10 đề tài/khoảng 9.000 ký tự; cắt mô tả có nhãn
+rút gọn và luôn nêu số đang hiển thị/tổng số. Description cho phép multiline,
+HTML được chuyển thành text; script/style bị bỏ, markup được escape. Link/email
+trong prose được thay bằng nhãn nguồn/liên hệ, không tạo link đăng ký. Không
+diễn giải mã trạng thái thành đang tuyển/đã đóng hoặc số sinh viên thành chỗ trống.
+Tool turns không đưa vào model history; response công khai đã normalize giữ
+replay theo cơ chế public tool hiện có. Log không ghi tên/ID/args/payload.
+
+Schema teacher/company được tách riêng. Theo lần kiểm tra ngày 27/11/2026,
+search thật trả ID number; các đối tượng đã thử có topics `[]`. Chưa xác minh
+item non-empty của hai nguồn, đặc biệt company chưa có mô tả field chính thức
+trong tài liệu được cấp. Adapter company hiện nhận field hiển thị tương ứng
+`title/description/studentNum/departmentName/programIds/types/topicType/internType/status`;
+biến thể khác trả `HUST_TOPICS_DATA_INVALID`, không đoán hoặc trả raw payload.
+`null`/`[]` chỉ là HUST chưa trả đề tài, không kết luận đơn vị không nhận sinh viên.
+
+Các bộ test/fixture/probe chỉ giữ local ngoài repo, không đưa vào CI/commit.
+Build backend rồi chạy `node ../kiem-thu/be/research-topics/run-tests.mjs` từ
+repo backend hoặc `node kiem-thu/be/research-topics/run-tests.mjs` từ workspace.
+Runner cần các bộ hồi quy local và dependencies frontend để kiểm tra SSR/auth.
+Không cần thay layout frontend hoặc đăng nhập lại để dùng dữ liệu công khai.
+
+Rollback: tắt `CHAT_TOPICS_ENABLED`, restart và disable hai topic tool qua
+management; search và tool cá nhân giữ cấu hình riêng. Collection context mới
+có TTL, không cần migration bắt buộc cho conversation cũ.
+
 ## Trace và kiểm tra code
 
 ### Định dạng câu trả lời
