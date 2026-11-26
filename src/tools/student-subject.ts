@@ -2,6 +2,19 @@ import { fold } from '../guardrails/policy.js';
 import type { PrivacySession } from '../privacy/session.js';
 import { studentIdSchema } from './grades.js';
 
+/** Defense against personal-data fallback to RAG; routing itself remains an LLM decision. */
+export function isExamLookupRequest(message: string): boolean {
+  const value = fold(message);
+  return (
+    /lich thi|sap.{0,35}\bthi\b|(?:khi nao|bao gio|may gio|phong nao).{0,25}\bthi\b/u.test(
+      value,
+    ) &&
+    !/quy dinh|quy che|thu tuc|dieu kien|cach xem|huong dan|phuc khao/u.test(
+      value,
+    )
+  );
+}
+
 export function isGradeLookupRequest(message: string): boolean {
   const value = fold(message);
   return (
@@ -28,6 +41,9 @@ export interface SubjectReferences {
   activeRef?: string;
   explicitRefs: string[];
   conflict: boolean;
+  /** Server-issued, owner-scoped exam context; never accepted from frontend. */
+  examSemester?: string;
+  examLookupPending?: boolean;
 }
 export interface StudentSubjectStore {
   load(id: string, ownerHash: string): Promise<StudentSubjects | undefined>;
@@ -51,7 +67,8 @@ export function prepareStudentSubjects(
   const value = fold(message);
   const studentContext =
     /mssv|ma so sinh vien|studentid/u.test(value) ||
-    isGradeLookupRequest(message);
+    isGradeLookupRequest(message) ||
+    isExamLookupRequest(message);
   const unrelatedIdentifier = /cccd|cmnd|so tai khoan/u.test(value);
   const explicitRefs = privacy
     .references(masked)

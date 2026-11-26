@@ -1,4 +1,5 @@
-import { authorizeGrade, type ToolAccess } from '../auth/tool-access.js';
+import { authorizeStudentData, type ToolAccess } from '../auth/tool-access.js';
+import { isPrivateTool } from './student-data.js';
 import { ChatError } from '../chat/contracts.js';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -8,6 +9,7 @@ import { z } from 'zod';
 import { findTool, toolCatalog, type ToolDefinition } from './catalog.js';
 import { HustClient } from './client.js';
 import { isGradeTool, normalizeGrades } from './grades.js';
+import { normalizeExams } from './exams.js';
 import { readToolConfig, type ToolConfig } from './config.js';
 import {
   UpstreamError,
@@ -117,6 +119,12 @@ export class ToolManager {
     }));
   }
 
+  async isEnabled(id: string): Promise<boolean> {
+    await this.ready;
+    const tool = findTool(id);
+    return Boolean(tool && (this.settings[id] ?? this.defaults(tool)).enabled);
+  }
+
   async update(id: string, input: unknown) {
     await this.ready;
     const tool = findTool(id);
@@ -159,9 +167,9 @@ export class ToolManager {
         access?.kind === 'demo'
           ? access.principal?.studentId
           : this.config.studentId;
-    if (isGradeTool(id) || tool.studentBound) {
+    if (isPrivateTool(id) || tool.studentBound) {
       try {
-        await authorizeGrade(args.studentId, access);
+        await authorizeStudentData(args.studentId, access);
       } catch (error) {
         return base(
           'error',
@@ -202,9 +210,13 @@ export class ToolManager {
         settings.retries,
         signal,
       );
-      if (isGradeTool(id) || tool.studentBound)
-        await authorizeGrade(args.studentId, access);
-      const data = isGradeTool(id) ? normalizeGrades(payload) : payload;
+      if (isPrivateTool(id) || tool.studentBound)
+        await authorizeStudentData(args.studentId, access);
+      const data = isGradeTool(id)
+        ? normalizeGrades(payload)
+        : id === 'get_exams'
+          ? normalizeExams(payload)
+          : payload;
       result = {
         ...base(
           data == null || (Array.isArray(data) && data.length === 0)

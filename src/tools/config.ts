@@ -32,7 +32,7 @@ export function readToolConfig(
   }
   // A malformed MSSV only disables the student tools; the rest of the API keeps running.
   let studentId = env.DEMO_STUDENT_ID?.trim() || undefined;
-  if (studentId && !/^\d{8,10}$/u.test(studentId)) {
+  if (studentId && !/^[0-9]{8,9}$/u.test(studentId)) {
     logger.warn('tools.config.invalid', {
       errorCode: 'DEMO_STUDENT_ID_INVALID',
     });

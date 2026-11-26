@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { gradesInputSchema, gradesByCourseInputSchema } from './grades.js';
+import { examsInputSchema } from './exams.js';
 
 const code = z
   .string()
@@ -42,6 +43,20 @@ function partner(
 
 // Grade tools are explicitly enabled by management; public chat has a separate gate.
 export const toolCatalog: readonly ToolDefinition[] = [
+  {
+    id: 'get_exams',
+    endpoint: 'exams',
+    description:
+      'Lịch thi học kỳ của chính sinh viên đang đăng nhập; không dùng cho quy chế thi.',
+    source: 'partner',
+    schema: examsInputSchema,
+    studentBound: true,
+    defaultEnabled: false,
+    timeoutMs: 10000,
+    warnings: [
+      'Lịch thi cá nhân; chỉ tài khoản được gắn đúng MSSV hoặc management được phép truy cập.',
+    ],
+  },
   partner(
     'get_semesters',
     'semesters',

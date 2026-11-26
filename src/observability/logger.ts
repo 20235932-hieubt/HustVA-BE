@@ -123,6 +123,7 @@ function safeFields(fields: LogFields): Record<string, string | number> {
         'search_teachers',
         'search_companies',
         'get_grades',
+        'get_exams',
         'get_grades_by_course',
         'get_student_info',
         'get_academic_result',
