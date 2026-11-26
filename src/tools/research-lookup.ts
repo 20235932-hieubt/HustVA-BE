@@ -4,6 +4,7 @@ import type { ToolAccess } from '../auth/tool-access.js';
 import type { ToolResult } from './contracts.js';
 import type { ChatTools } from './chat.js';
 import type { ToolBudget } from './exam-semester.js';
+import type { PrivacySession } from '../privacy/session.js';
 import {
   researchIdSchema,
   researchLabelSchema,
@@ -80,6 +81,32 @@ export interface ResearchReferences {
   kind: ResearchKind;
   choices: { ref: string; label: string; unit?: string; index: number }[];
   selectedRef?: string;
+}
+export interface ResearchLookupStore {
+  load(id: string, ownerHash: string): Promise<ResearchLookupState | undefined>;
+  save(
+    id: string,
+    ownerHash: string,
+    runId: string,
+    state: ResearchLookupState,
+  ): Promise<void>;
+}
+export function researchReferences(
+  state: ResearchLookupState | undefined,
+  privacy: PrivacySession,
+): ResearchReferences | undefined {
+  const valid = validResearchState(state);
+  if (!valid) return;
+  return {
+    kind: valid.kind,
+    selectedRef: valid.selectedRef,
+    choices: valid.candidates.map((candidate, index) => ({
+      ref: candidate.ref,
+      index: index + 1,
+      label: privacy.pseudonymize(candidate.label),
+      ...(candidate.unit ? { unit: privacy.pseudonymize(candidate.unit) } : {}),
+    })),
+  };
 }
 export type ResearchOutcome =
   | { status: 'selection'; state: ResearchLookupState }

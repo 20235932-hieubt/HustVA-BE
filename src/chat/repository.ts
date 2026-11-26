@@ -62,10 +62,14 @@ export class MongoConversationStore implements ConversationStore {
   private readonly conversations;
   private readonly requests;
   private readonly subjects;
+  private readonly researchTargets;
   constructor(db: Db) {
     this.conversations = db.collection<Conversation>('chat_conversations');
     this.requests = db.collection<RequestRecord>('chat_requests');
     this.subjects = db.collection<{ _id: string }>('chat_student_subjects');
+    this.researchTargets = db.collection<{ _id: string }>(
+      'chat_research_targets',
+    );
   }
   async init() {
     await this.conversations.createIndex(
@@ -190,6 +194,7 @@ export class MongoConversationStore implements ConversationStore {
     // Delete messages first so a failed operation can be retried with the existing capability.
     await this.requests.deleteMany({ conversationId: id });
     await this.subjects.deleteMany({ _id: id });
+    await this.researchTargets.deleteMany({ _id: id });
     await this.conversations.deleteOne({ _id: id });
   }
 }
