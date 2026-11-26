@@ -5,6 +5,7 @@ import { performance } from 'node:perf_hooks';
 import { z } from 'zod';
 import { findTool, toolCatalog, type ToolDefinition } from './catalog.js';
 import { HustClient } from './client.js';
+import { isGradeTool, normalizeGrades } from './grades.js';
 import { readToolConfig, type ToolConfig } from './config.js';
 import {
   UpstreamError,
@@ -149,7 +150,9 @@ export class ToolManager {
     const parsed = tool.schema.safeParse(input);
     if (!parsed.success)
       return base('invalid_arguments', 'TOOL_ARGUMENTS_INVALID');
-    const args = parsed.data;
+    const args = { ...parsed.data };
+    if (isGradeTool(id) && typeof args.courseId === 'string')
+      args.courseId = args.courseId.toUpperCase();
     const settings = { ...(this.settings[id] ?? this.defaults(tool)) };
     if (!settings.enabled) return base('disabled', 'TOOL_DISABLED');
     if (!this.client.configured())
@@ -173,7 +176,13 @@ export class ToolManager {
     let result: ToolResult;
     try {
       signal.throwIfAborted();
-      const data = await this.client.call(tool, args, settings.retries, signal);
+      const payload = await this.client.call(
+        tool,
+        args,
+        settings.retries,
+        signal,
+      );
+      const data = isGradeTool(id) ? normalizeGrades(payload) : payload;
       result = {
         ...base(
           data == null || (Array.isArray(data) && data.length === 0)

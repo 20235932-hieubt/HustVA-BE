@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { gradesInputSchema, gradesByCourseInputSchema } from './grades.js';
 
 const code = z
   .string()
@@ -35,7 +36,7 @@ function partner(
   };
 }
 
-// Phase 1: five independent shared-data endpoints; no student records or workflows.
+// Grade tools are explicitly enabled by management; public chat has a separate gate.
 export const toolCatalog: readonly ToolDefinition[] = [
   partner(
     'get_semesters',
@@ -66,6 +67,30 @@ export const toolCatalog: readonly ToolDefinition[] = [
       keyWord: keyword,
     },
   ),
+  ...[
+    {
+      id: 'get_grades',
+      endpoint: 'grades',
+      schema: gradesInputSchema,
+      description:
+        'Tra cứu điểm học phần theo MSSV, có thể lọc học kỳ; không trả GPA/CPA.',
+    },
+    {
+      id: 'get_grades_by_course',
+      endpoint: 'gradebycourseid',
+      schema: gradesByCourseInputSchema,
+      description:
+        'Tra cứu các lần học của một mã học phần theo MSSV; không tự chọn lần học.',
+    },
+  ].map((item): ToolDefinition => ({
+    ...item,
+    source: 'partner',
+    defaultEnabled: false,
+    timeoutMs: 10000,
+    warnings: [
+      'Dữ liệu điểm cá nhân; chưa có xác thực chủ sở hữu MSSV. Chỉ dùng trong môi trường thử được kiểm soát.',
+    ],
+  })),
 ];
 
 export function findTool(id: string): ToolDefinition | undefined {
