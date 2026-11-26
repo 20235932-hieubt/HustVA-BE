@@ -5,6 +5,10 @@ import { ChatGoogle } from '@langchain/google/node';
 import { ChatError } from '../chat/contracts.js';
 import type { AgentModel } from '../agent/model.js';
 import type { ChatConfig } from '../agent/config.js';
+import {
+  getGeminiKeyPool,
+  type GeminiKeyPool,
+} from '../agent/gemini-key-pool.js';
 import { currentPrivacy } from '../privacy/session.js';
 import { fold, hasSecret } from '../guardrails/policy.js';
 import { findTool, toolCatalog } from './catalog.js';
@@ -254,13 +258,17 @@ export function createToolSelector(
   };
 }
 
-export function createRoutingModel(config: ChatConfig): AgentModel {
-  let bound: ReturnType<ChatGoogle['bindTools']> | undefined;
+export function createRoutingModel(
+  config: ChatConfig,
+  pool: GeminiKeyPool = getGeminiKeyPool(config),
+): AgentModel {
+  const clients = new Map<string, ReturnType<ChatGoogle['bindTools']>>();
   return {
     async invoke(messages, signal) {
       currentPrivacy();
       signal.throwIfAborted();
-      if (!config.apiKey || !config.model)
+      const model = config.model;
+      if (!pool.configured || !model)
         throw new ChatError(
           503,
           'GEMINI_NOT_CONFIGURED',
@@ -277,17 +285,24 @@ export function createRoutingModel(config: ChatConfig): AgentModel {
           'Bạn gửi câu hỏi ngắn hơn giúp mình nhé.',
         );
       try {
-        bound ??= new ChatGoogle({
-          apiKey: config.apiKey,
-          model: config.model,
-          maxRetries: 0,
-          maxOutputTokens: config.maxOutputTokens,
-        }).bindTools(buildRoutingTools(config.gradesEnabled), {
-          tool_choice: 'any',
-        });
-        return await bound.invoke(messages, { signal });
-      } catch {
+        return await pool.run(async (apiKey) => {
+          let bound = clients.get(apiKey);
+          if (!bound) {
+            bound = new ChatGoogle({
+              apiKey,
+              model,
+              maxRetries: 0,
+              maxOutputTokens: config.maxOutputTokens,
+            }).bindTools(buildRoutingTools(config.gradesEnabled), {
+              tool_choice: 'any',
+            });
+            clients.set(apiKey, bound);
+          }
+          return await bound.invoke(messages, { signal });
+        }, signal);
+      } catch (error) {
         signal.throwIfAborted();
+        if (error instanceof ChatError) throw error;
         throw new ChatError(
           503,
           'GEMINI_UNAVAILABLE',

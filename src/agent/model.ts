@@ -10,6 +10,11 @@ import { searchSchema, sectionSchema } from '../knowledge/stub.js';
 import type { ChatConfig } from './config.js';
 import { logger } from '../observability/logger.js';
 import { providerMessages } from '../privacy/provider.js';
+import {
+  getGeminiKeyPool,
+  geminiErrorStatus,
+  type GeminiKeyPool,
+} from './gemini-key-pool.js';
 
 export type ModelReply = AIMessage | AIMessageChunk;
 export interface AgentModel {
@@ -41,15 +46,23 @@ const modelTools = [
   }),
 ];
 
-export function createGeminiModel(config: ChatConfig): AgentModel {
-  let chat: ChatGoogle | undefined;
-  let bound: ReturnType<ChatGoogle['bindTools']> | undefined;
-  let finalOnly: ReturnType<ChatGoogle['bindTools']> | undefined;
+export function createGeminiModel(
+  config: ChatConfig,
+  pool: GeminiKeyPool = getGeminiKeyPool(config),
+): AgentModel {
+  const clients = new Map<
+    string,
+    {
+      bound: ReturnType<ChatGoogle['bindTools']>;
+      finalOnly: ReturnType<ChatGoogle['bindTools']>;
+    }
+  >();
   return {
     async invoke(messages, signal, options = {}) {
       signal.throwIfAborted();
       const protectedMessages = providerMessages(messages);
-      if (!config.apiKey || !config.model) {
+      const model = config.model;
+      if (!pool.configured || !model) {
         logger.warn('gemini.configuration.missing', {
           errorCode: 'GEMINI_NOT_CONFIGURED',
         });
@@ -60,52 +73,55 @@ export function createGeminiModel(config: ChatConfig): AgentModel {
         );
       }
       try {
-        chat ??= new ChatGoogle({
-          apiKey: config.apiKey,
-          model: config.model,
-          maxRetries: 0,
-          maxOutputTokens: config.maxOutputTokens,
-          safetySettings: [
-            {
-              category: 'HARM_CATEGORY_HARASSMENT',
-              threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-            },
-            {
-              category: 'HARM_CATEGORY_HATE_SPEECH',
-              threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-            },
-            {
-              category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-              threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-            },
-            {
-              category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-              threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-            },
-          ],
-        });
-        // Gemini's default AUTO mode may answer in plain text, which the graph must reject because it
-        // carries no citations. ANY makes every turn a tool call (search, read or submit_answer).
-        bound ??= chat.bindTools(modelTools, { tool_choice: 'any' });
-        finalOnly ??= chat.bindTools(
-          modelTools.filter((item) => item.name === 'submit_answer'),
-          { tool_choice: 'any' },
-        );
-        const result = await (options.final ? finalOnly : bound).invoke(
-          protectedMessages,
-          { signal },
-        );
-        signal.throwIfAborted();
-        return result;
+        return await pool.run(async (apiKey) => {
+          let client = clients.get(apiKey);
+          if (!client) {
+            const chat = new ChatGoogle({
+              apiKey,
+              model,
+              maxRetries: 0,
+              maxOutputTokens: config.maxOutputTokens,
+              safetySettings: [
+                {
+                  category: 'HARM_CATEGORY_HARASSMENT',
+                  threshold: 'BLOCK_MEDIUM_AND_ABOVE',
+                },
+                {
+                  category: 'HARM_CATEGORY_HATE_SPEECH',
+                  threshold: 'BLOCK_MEDIUM_AND_ABOVE',
+                },
+                {
+                  category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+                  threshold: 'BLOCK_MEDIUM_AND_ABOVE',
+                },
+                {
+                  category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+                  threshold: 'BLOCK_MEDIUM_AND_ABOVE',
+                },
+              ],
+            });
+            // Gemini's default AUTO mode may answer in plain text, which the graph must reject because it
+            // carries no citations. ANY makes every turn a tool call (search, read or submit_answer).
+            client = {
+              bound: chat.bindTools(modelTools, { tool_choice: 'any' }),
+              finalOnly: chat.bindTools(
+                modelTools.filter((item) => item.name === 'submit_answer'),
+                { tool_choice: 'any' },
+              ),
+            };
+            clients.set(apiKey, client);
+          }
+          const result = await (
+            options.final ? client.finalOnly : client.bound
+          ).invoke(protectedMessages, { signal });
+          signal.throwIfAborted();
+          return result;
+        }, signal);
       } catch (error) {
+        signal.throwIfAborted();
+        if (error instanceof ChatError) throw error;
         // Provider status is useful for quota/auth failures; messages and payloads may contain secrets.
-        const providerStatus =
-          error &&
-          typeof error === 'object' &&
-          'status' in error &&
-          typeof error.status === 'number'
-            ? error.status
-            : undefined;
+        const providerStatus = geminiErrorStatus(error);
         if (!signal.aborted)
           logger.error('gemini.provider.failed', {
             errorCode: 'GEMINI_UNAVAILABLE',
