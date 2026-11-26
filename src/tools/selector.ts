@@ -21,6 +21,7 @@ import {
   studentIdSchema,
 } from './grades.js';
 import { examSemesterSelection } from './exam-semester.js';
+import { logger } from '../observability/logger.js';
 import {
   resolveStudentSubject,
   type SubjectReferences,
@@ -62,7 +63,20 @@ const gradesSelection = z.strictObject({
 });
 const examsSelection = z.strictObject({
   ...subjectSelection,
-  semester: examSemesterSelection,
+  // A scalar wire format avoids nested anyOf tool arguments being flattened by models.
+  semester: z
+    .string()
+    .trim()
+    .regex(/^(?:[0-9]{4}[123]|current|context)$/u)
+    .describe(
+      'Mã kỳ có trong câu hỏi, hoặc current cho kỳ hiện tại, context cho kỳ đã xác định trong tham chiếu backend.',
+    ),
+});
+// Accept the earlier object representation only at the local validation boundary.
+// It is not advertised to the model; both representations keep the same permission gates.
+const examsArguments = z.strictObject({
+  ...subjectSelection,
+  semester: z.union([examsSelection.shape.semester, examSemesterSelection]),
 });
 const courseGradesSelection = z.strictObject({
   ...subjectSelection,
@@ -110,7 +124,7 @@ Nếu có nhiều MSSV hoặc context conflict thì hỏi lại. Nếu chưa có
 const examsPrompt = `
 Tra lịch thi cá nhân dùng get_exams, kể cả câu viết tắt/không dấu hoặc hỏi khi nào thi. Quy chế, điều kiện dự thi, phúc khảo dùng route_knowledge.
 subject=self khi hỏi của tôi/em/mình hoặc hỏi lịch của chính người đang đăng nhập; active khi tiếp nối đối tượng; explicit khi có token MSSV trong câu, giữ token đó vào studentIdRef. Nếu backend có selfRef thì không hỏi lại MSSV. Không đoán MSSV hoặc dùng tên/email làm định danh.
-semester.kind=code và code đúng mã có trong câu; kind=current khi người dùng nói kỳ này/hiện tại; kind=context chỉ khi người dùng tham chiếu kỳ trước đã hỏi và backend có examSemester, code phải khớp metadata đó. Thiếu kỳ hoặc kỳ trước/kỳ tới không có mã thì ask_clarification với tool=get_exams. Không mặc định lấy kỳ hiện tại khi chưa được yêu cầu.
+semester là chuỗi: mã kỳ đúng mã có trong câu (ví dụ "20252"), "current" khi người dùng nói kỳ này/hiện tại, hoặc "context" chỉ khi người dùng tham chiếu kỳ đã hỏi và backend có examSemester. Không dùng object kind/code cho semester. Thiếu kỳ hoặc kỳ trước/kỳ tới không có mã thì ask_clarification với tool=get_exams. Không mặc định lấy kỳ hiện tại khi chưa được yêu cầu.
 Nếu backend có examLookupPending thì câu tiếp chỉ chứa mã kỳ hoặc kỳ hiện tại có thể tiếp tục tra lịch thi. Không dùng nội dung câu hỏi để tự tạo backend context. Backend sẽ resolve kỳ và thực thi; chỉ chọn một tool, không gọi thêm model để viết lại lịch.`;
 
 export function buildRoutingTools(gradesEnabled = false, examsEnabled = false) {
@@ -161,12 +175,18 @@ export function buildRoutingTools(gradesEnabled = false, examsEnabled = false) {
 }
 export const routingTools = buildRoutingTools();
 
-const invalid = () =>
-  new ChatError(
+const invalid = (reasonCode = 'HUST_ROUTING_CALL_INVALID', tool?: string) => {
+  logger.warn('hust.selection.invalid', {
+    reasonCode,
+    tool,
+    status: 'invalid_arguments',
+  });
+  return new ChatError(
     503,
     'HUST_SELECTION_INVALID',
     'Mình chưa hiểu rõ yêu cầu. Bạn diễn đạt lại giúp mình nhé.',
   );
+};
 
 export function createToolSelector(
   model: AgentModel,
@@ -221,8 +241,9 @@ export function createToolSelector(
 
       if (call.name === 'get_exams') {
         if (!examsEnabled) throw invalid();
-        const parsed = examsSelection.safeParse(call.args);
-        if (!parsed.success) throw invalid();
+        const parsed = examsArguments.safeParse(call.args);
+        if (!parsed.success)
+          throw invalid('HUST_EXAMS_SELECTION_SCHEMA_INVALID', call.name);
         const mentionedIds = privacy
           .references(message)
           .filter(
@@ -245,17 +266,28 @@ export function createToolSelector(
             clarification:
               'Mình chưa xác định được tài khoản tra cứu. Bạn đăng nhập và xác nhận lại đối tượng giúp mình nhé.',
           };
-        const semester = parsed.data.semester;
+        const rawSemester = parsed.data.semester;
+        const semester =
+          typeof rawSemester !== 'string'
+            ? rawSemester
+            : rawSemester === 'current'
+              ? { kind: 'current' as const }
+              : rawSemester === 'context'
+                ? {
+                    kind: 'context' as const,
+                    code: subjects?.examSemester ?? '',
+                  }
+                : { kind: 'code' as const, code: rawSemester };
         if (
           semester.kind === 'code' &&
           !message.split(/[^0-9]+/u).includes(semester.code)
         )
-          throw invalid();
+          throw invalid('HUST_EXAMS_SEMESTER_NOT_IN_MESSAGE', call.name);
         if (
           semester.kind === 'context' &&
-          semester.code !== subjects?.examSemester
+          (!subjects?.examSemester || semester.code !== subjects.examSemester)
         )
-          throw invalid();
+          throw invalid('HUST_EXAMS_SEMESTER_CONTEXT_INVALID', call.name);
         // Explicit references must not silently disappear when the model chooses self.
         if (
           context.explicitRefs.some((ref) => privacy.restore(ref) !== studentId)
