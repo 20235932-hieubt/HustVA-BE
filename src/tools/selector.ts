@@ -94,6 +94,8 @@ export function buildRoutingTools(gradesEnabled = false) {
   return [
     ...toolCatalog
       .filter((definition) => !definition.internal)
+      // Enabled for chat only when routing, privacy and formatting are complete.
+      .filter((definition) => definition.id !== 'get_exams')
       .filter((definition) => gradesEnabled || !isGradeTool(definition.id))
       .map((definition) =>
         tool(async () => '', {
@@ -184,6 +186,7 @@ export function createToolSelector(
       }
       const definition = findTool(call.name);
       if (!definition || definition.internal) throw invalid();
+      if (call.name === 'get_exams') throw invalid();
       if (isGradeTool(call.name)) {
         if (!gradesEnabled) throw invalid();
         const selection = (

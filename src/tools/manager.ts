@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { findTool, toolCatalog, type ToolDefinition } from './catalog.js';
 import { HustClient } from './client.js';
 import { isGradeTool, normalizeGrades } from './grades.js';
+import { normalizeExams } from './exams.js';
 import { readToolConfig, type ToolConfig } from './config.js';
 import {
   UpstreamError,
@@ -205,7 +206,11 @@ export class ToolManager {
       );
       if (isPrivateTool(id) || tool.studentBound)
         await authorizeStudentData(args.studentId, access);
-      const data = isGradeTool(id) ? normalizeGrades(payload) : payload;
+      const data = isGradeTool(id)
+        ? normalizeGrades(payload)
+        : id === 'get_exams'
+          ? normalizeExams(payload)
+          : payload;
       result = {
         ...base(
           data == null || (Array.isArray(data) && data.length === 0)
