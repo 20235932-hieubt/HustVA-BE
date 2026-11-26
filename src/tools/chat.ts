@@ -3,6 +3,7 @@ import { reply, type ChatResult } from '../chat/contracts.js';
 
 import type { ToolResult } from './contracts.js';
 import { isGradeTool, renderGrades } from './grades.js';
+import { logger } from '../observability/logger.js';
 
 export interface ChatTools {
   execute(
@@ -183,6 +184,12 @@ export async function runChatTool(
       'HUST_TOOL_EMPTY',
     );
   if (result.status !== 'success') {
+    logger.warn('hust.tool.unavailable', {
+      tool: plan.id,
+      status: result.status,
+      errorCode: result.errorCode ?? 'HUST_TOOL_UNAVAILABLE',
+      durationMs: result.durationMs,
+    });
     const answers: Partial<Record<ToolResult['status'], string>> = {
       disabled: 'Tính năng tra cứu này đang tạm ngừng. Bạn thử lại sau nhé.',
       not_configured:

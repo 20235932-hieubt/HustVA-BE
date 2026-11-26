@@ -64,6 +64,14 @@ const statuses = new Set([
   'invalid_arguments',
   'empty',
   'ok',
+  'success',
+  'error',
+  'timeout',
+  'cancelled',
+  'disabled',
+  'not_configured',
+  'not_found',
+  'busy',
 ]);
 
 // Only operational metadata crosses this boundary. Never accept bodies, prompts,
@@ -109,6 +117,13 @@ function safeFields(fields: LogFields): Record<string, string | number> {
         'search_knowledge',
         'read_document_section',
         'submit_answer',
+        'get_semesters',
+        'get_study_conditions',
+        'get_advanced_programs',
+        'search_teachers',
+        'search_companies',
+        'get_grades',
+        'get_grades_by_course',
       ].includes(value)
         ? value
         : 'unknown';
