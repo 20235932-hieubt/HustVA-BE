@@ -393,16 +393,17 @@ hoặc mật khẩu mặc định. Chạy backend một tiến trình trong giai
    `API_ORIGIN=http://localhost:4000`, `WEB_ORIGIN=http://localhost:3000` và URL
    frontend phải thống nhất hostname `localhost`; không trộn `127.0.0.1`.
 
-| Endpoint                        | Hợp đồng                                                                    |
-| ------------------------------- | --------------------------------------------------------------------------- |
-| `POST /api/v1/auth/demo/login`  | JSON strict `{username,password}`, trả accountId/displayName/expiresAt/mode |
-| `GET /api/v1/auth/demo/me`      | Thông tin phiên tối thiểu hoặc 401                                          |
-| `POST /api/v1/auth/demo/logout` | JSON `{}`, revoke session và xóa cookie, 204; gọi lại an toàn               |
+| Endpoint                        | Hợp đồng                                                                              |
+| ------------------------------- | ------------------------------------------------------------------------------------- |
+| `POST /api/v1/auth/demo/login`  | JSON strict `{username,password}`, trả accountId/studentId/displayName/expiresAt/mode |
+| `GET /api/v1/auth/demo/me`      | Thông tin phiên tối thiểu hoặc 401                                                    |
+| `POST /api/v1/auth/demo/logout` | JSON `{}`, revoke session và xóa cookie, 204; gọi lại an toàn                         |
 
 Mutation auth bắt buộc Origin khớp WEB_ORIGIN/API_ORIGIN và Content-Type JSON.
 CORS credentials chỉ cho WEB_ORIGIN cụ thể. Cookie `hustva_demo` là HttpOnly,
 host-only, SameSite=Lax, Path=/api/v1; Secure tự bật khi API_ORIGIN dùng HTTPS.
-Client không nhận auth token/MSSV/passwordHash trong JSON. Login giới hạn theo
+Client chỉ nhận MSSV của chính tài khoản đã xác thực để hiển thị trong chat;
+không nhận auth token/passwordHash trong JSON. Login giới hạn theo
 IP và username với bucket có TTL và giới hạn số lượng; lỗi sai username/password
 dùng cùng thông báo. Rate limit hiện theo tiến trình.
 

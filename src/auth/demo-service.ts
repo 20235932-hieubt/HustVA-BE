@@ -90,6 +90,7 @@ export class DemoAuthService {
   private publicUser(account: DemoAccount, session: DemoSession) {
     return {
       accountId: account.accountId,
+      studentId: account.studentId,
       displayName: account.displayName ?? account.username,
       expiresAt: session.expiresAt,
       mode: 'demo' as const,
