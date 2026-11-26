@@ -12,6 +12,7 @@ import { readHttpConfig } from '../http-config.js';
 
 export function createChatRouter(
   service: () => Promise<ChatService> = getChatService,
+  resolvePrincipal: typeof resolveDemoPrincipal = resolveDemoPrincipal,
 ): express.Router {
   const router = express.Router();
   router.use(requestTrace);
@@ -85,7 +86,7 @@ export function createChatRouter(
       .json(
         await (
           await service()
-        ).create(await resolveDemoPrincipal(req.get('cookie'))),
+        ).create(await resolvePrincipal(req.get('cookie'))),
       );
   });
   router.post('/conversations/:id/messages', async (req, res) => {
@@ -125,7 +126,7 @@ export function createChatRouter(
           auth.token,
           req.body,
           signal,
-          await resolveDemoPrincipal(req.get('cookie')),
+          await resolvePrincipal(req.get('cookie')),
         );
       })();
       const result = await abortable(work, signal);
@@ -167,7 +168,7 @@ export function createChatRouter(
         auth.token,
         number(req.query.limit, 20, 1, 50),
         number(req.query.offset, 0, 0, 1000),
-        await resolveDemoPrincipal(req.get('cookie')),
+        await resolvePrincipal(req.get('cookie')),
       ),
     });
   });
@@ -182,7 +183,7 @@ export function createChatRouter(
         auth.id,
         auth.token,
         req.params.requestId as string,
-        await resolveDemoPrincipal(req.get('cookie')),
+        await resolvePrincipal(req.get('cookie')),
       ),
     );
   });
@@ -190,11 +191,7 @@ export function createChatRouter(
     const auth = credentials(req);
     await (
       await service()
-    ).remove(
-      auth.id,
-      auth.token,
-      await resolveDemoPrincipal(req.get('cookie')),
-    );
+    ).remove(auth.id, auth.token, await resolvePrincipal(req.get('cookie')));
     res.status(204).end();
   });
   router.use((_req, _res, next) =>
