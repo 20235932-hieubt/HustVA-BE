@@ -7,6 +7,7 @@ export const tokenHash = (token: string) =>
 export interface Conversation {
   _id: string;
   tokenHash: string;
+  ownerAccountId?: string;
   context: StudentContext;
   createdAt: Date;
   expiresAt: Date;
@@ -29,7 +30,7 @@ export interface RequestRecord {
   nonReplayable?: boolean;
 }
 export interface ConversationStore {
-  create(hash: string): Promise<Conversation>;
+  create(hash: string, ownerAccountId?: string): Promise<Conversation>;
   find(id: string, hash: string): Promise<Conversation | null>;
   acquire(
     id: string,
@@ -78,11 +79,12 @@ export class MongoConversationStore implements ConversationStore {
       { name: 'conversation_history' },
     );
   }
-  async create(hash: string) {
+  async create(hash: string, ownerAccountId?: string) {
     const now = new Date();
     const conversation: Conversation = {
       _id: randomUUID(),
       tokenHash: hash,
+      ...(ownerAccountId ? { ownerAccountId } : {}),
       context: {},
       createdAt: now,
       expiresAt: new Date(now.getTime() + 30 * 86_400_000),

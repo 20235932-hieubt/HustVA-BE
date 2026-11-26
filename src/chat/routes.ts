@@ -1,3 +1,4 @@
+import { resolveDemoPrincipal } from '../auth/runtime.js';
 import express from 'express';
 import { z } from 'zod';
 import { ChatError } from './contracts.js';
@@ -79,7 +80,13 @@ export function createChatRouter(
     if (!z.strictObject({}).safeParse(req.body).success)
       throw new ChatError(400, 'BODY_INVALID', 'Body tạo phiên là {}.');
     limit(`create:${req.ip}`, 10);
-    res.status(201).json(await (await service()).create());
+    res
+      .status(201)
+      .json(
+        await (
+          await service()
+        ).create(await resolveDemoPrincipal(req.get('cookie'))),
+      );
   });
   router.post('/conversations/:id/messages', async (req, res) => {
     if (z.uuid().safeParse(req.body?.requestId).success)
@@ -113,7 +120,13 @@ export function createChatRouter(
       const work = (async () => {
         const chat = await service();
         signal.throwIfAborted();
-        return chat.message(auth.id, auth.token, req.body, signal);
+        return chat.message(
+          auth.id,
+          auth.token,
+          req.body,
+          signal,
+          await resolveDemoPrincipal(req.get('cookie')),
+        );
       })();
       const result = await abortable(work, signal);
       addTraceContext({ runId: result.runId });
@@ -154,6 +167,7 @@ export function createChatRouter(
         auth.token,
         number(req.query.limit, 20, 1, 50),
         number(req.query.offset, 0, 0, 1000),
+        await resolveDemoPrincipal(req.get('cookie')),
       ),
     });
   });
@@ -164,12 +178,23 @@ export function createChatRouter(
     res.json(
       await (
         await service()
-      ).request(auth.id, auth.token, req.params.requestId as string),
+      ).request(
+        auth.id,
+        auth.token,
+        req.params.requestId as string,
+        await resolveDemoPrincipal(req.get('cookie')),
+      ),
     );
   });
   router.delete('/conversations/:id', async (req, res) => {
     const auth = credentials(req);
-    await (await service()).remove(auth.id, auth.token);
+    await (
+      await service()
+    ).remove(
+      auth.id,
+      auth.token,
+      await resolveDemoPrincipal(req.get('cookie')),
+    );
     res.status(204).end();
   });
   router.use((_req, _res, next) =>

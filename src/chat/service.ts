@@ -1,3 +1,4 @@
+import type { DemoPrincipal } from '../auth/demo-service.js';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import type { AgentInput } from '../agent/graph.js';
@@ -86,9 +87,13 @@ export class ChatService {
       | { enabled: boolean; subjects: StudentSubjectStore }
       | undefined = undefined,
   ) {}
-  async create() {
+  async create(principal?: DemoPrincipal) {
+    await principal?.validate();
     const token = randomBytes(32).toString('base64url');
-    const conversation = await this.store.create(tokenHash(token));
+    const conversation = await this.store.create(
+      tokenHash(token),
+      principal?.accountId,
+    );
     addTraceContext({ conversationId: conversation._id });
     logger.info('chat.conversation.created', {
       conversationId: conversation._id,
@@ -99,13 +104,25 @@ export class ChatService {
       expiresAt: conversation.expiresAt,
     };
   }
-  private async owned(id: string, token: string) {
+  private async owned(id: string, token: string, principal?: DemoPrincipal) {
     const conversation = await this.store.find(id, tokenHash(token));
-    if (!conversation) throw notFound();
+    await principal?.validate();
+    if (
+      !conversation ||
+      (conversation.ownerAccountId &&
+        conversation.ownerAccountId !== principal?.accountId)
+    )
+      throw notFound();
     return conversation;
   }
-  async history(id: string, token: string, limit: number, offset: number) {
-    await this.owned(id, token);
+  async history(
+    id: string,
+    token: string,
+    limit: number,
+    offset: number,
+    principal?: DemoPrincipal,
+  ) {
+    await this.owned(id, token, principal);
     const records = (await this.store.list(id, limit, offset)).map(
       publicRecord,
     );
@@ -115,8 +132,13 @@ export class ChatService {
     });
     return records;
   }
-  async request(id: string, token: string, requestId: string) {
-    await this.owned(id, token);
+  async request(
+    id: string,
+    token: string,
+    requestId: string,
+    principal?: DemoPrincipal,
+  ) {
+    await this.owned(id, token, principal);
     const record = await this.store.request(id, requestId);
     if (!record)
       throw new ChatError(
@@ -126,8 +148,8 @@ export class ChatService {
       );
     return publicRecord(record);
   }
-  async remove(id: string, token: string) {
-    await this.owned(id, token);
+  async remove(id: string, token: string, principal?: DemoPrincipal) {
+    await this.owned(id, token, principal);
     const runId = randomUUID();
     if (
       !(await this.store.acquire(
@@ -154,6 +176,7 @@ export class ChatService {
     token: string,
     body: unknown,
     externalSignal = new AbortController().signal,
+    principal?: DemoPrincipal,
   ) {
     const parsed = messageSchema.safeParse(body);
     if (!parsed.success)
@@ -169,7 +192,14 @@ export class ChatService {
         { conversationId: id, requestId: input.requestId },
         () =>
           withPrivacy(privacy, () =>
-            this.processMessage(id, token, input, externalSignal, privacy),
+            this.processMessage(
+              id,
+              token,
+              input,
+              externalSignal,
+              privacy,
+              principal,
+            ),
           ),
       );
     } finally {
@@ -182,6 +212,7 @@ export class ChatService {
     input: MessageInput,
     externalSignal: AbortSignal,
     privacy: PrivacySession,
+    principal?: DemoPrincipal,
   ) {
     const started = performance.now();
     logger.info('chat.turn.received');
@@ -208,7 +239,7 @@ export class ChatService {
           'Context không được chứa định danh, thông tin xác thực hoặc chỉ dẫn vượt quyền.',
         );
     }
-    await this.owned(id, token);
+    await this.owned(id, token, principal);
     const safeMessage = screen.retainUser
       ? privacy.pseudonymize(input.message)
       : screen.message;
