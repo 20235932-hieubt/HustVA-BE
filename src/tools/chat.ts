@@ -262,7 +262,7 @@ export async function runChatTool(
   if (result.errorCode === 'HUST_STUDENT_FORBIDDEN')
     return response(
       'blocked',
-      'Bạn chỉ được tra cứu điểm của tài khoản đang đăng nhập.',
+      'Bạn chỉ được tra cứu dữ liệu của tài khoản đang đăng nhập.',
       'HUST_STUDENT_FORBIDDEN',
     );
   if (result.status === 'empty')

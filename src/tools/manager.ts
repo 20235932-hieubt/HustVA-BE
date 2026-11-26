@@ -1,4 +1,5 @@
-import { authorizeGrade, type ToolAccess } from '../auth/tool-access.js';
+import { authorizeStudentData, type ToolAccess } from '../auth/tool-access.js';
+import { isPrivateTool } from './student-data.js';
 import { ChatError } from '../chat/contracts.js';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -159,9 +160,9 @@ export class ToolManager {
         access?.kind === 'demo'
           ? access.principal?.studentId
           : this.config.studentId;
-    if (isGradeTool(id) || tool.studentBound) {
+    if (isPrivateTool(id) || tool.studentBound) {
       try {
-        await authorizeGrade(args.studentId, access);
+        await authorizeStudentData(args.studentId, access);
       } catch (error) {
         return base(
           'error',
@@ -202,8 +203,8 @@ export class ToolManager {
         settings.retries,
         signal,
       );
-      if (isGradeTool(id) || tool.studentBound)
-        await authorizeGrade(args.studentId, access);
+      if (isPrivateTool(id) || tool.studentBound)
+        await authorizeStudentData(args.studentId, access);
       const data = isGradeTool(id) ? normalizeGrades(payload) : payload;
       result = {
         ...base(

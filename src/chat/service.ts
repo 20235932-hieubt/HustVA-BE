@@ -9,6 +9,7 @@ import type { ToolSelector } from '../tools/selector.js';
 import { addTraceContext, logger, withTrace } from '../observability/logger.js';
 import { checkInput, hasSecret, normalize } from '../guardrails/policy.js';
 import { isGradeTool } from '../tools/grades.js';
+import { isPrivateTool } from '../tools/student-data.js';
 import {
   isGradeLookupRequest,
   prepareStudentSubjects,
@@ -32,9 +33,6 @@ import {
   type ConversationStore,
   type RequestRecord,
 } from './repository.js';
-
-const isPrivateTool = (id: string) =>
-  isGradeTool(id) || id === 'get_student_info' || id === 'get_academic_result';
 
 export type AgentRunner = (
   input: AgentInput,
@@ -272,7 +270,7 @@ export class ChatService {
         throw new ChatError(
           409,
           'REQUEST_NOT_REPLAYABLE',
-          'Kết quả điểm cá nhân không được lưu để phát lại. Hãy gửi yêu cầu mới nếu cần tra cứu lại.',
+          'Kết quả cá nhân không được lưu để phát lại. Hãy gửi yêu cầu mới nếu cần tra cứu lại.',
         );
       if (existing.status === 'completed' && existing.result) {
         logger.info('chat.turn.replayed', {
@@ -390,7 +388,7 @@ export class ChatService {
       const subjectResult = forbiddenSubject
         ? reply(
             'blocked',
-            'Bạn chỉ được tra cứu điểm của tài khoản đang đăng nhập.',
+            'Bạn chỉ được tra cứu dữ liệu của tài khoản đang đăng nhập.',
             'HUST_STUDENT_FORBIDDEN',
           )
         : prepared?.references.conflict
