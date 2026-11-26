@@ -39,7 +39,12 @@ const gradeRowSchema = z.object({
   semester: gradeSemesterSchema,
   examMark: mark,
   processMark: mark,
-  finalMarkLetter: text.nullish(),
+  // HUST uses an empty string while the letter grade is not available yet.
+  finalMarkLetter: z.preprocess(
+    (value) =>
+      typeof value === 'string' && value.trim() === '' ? null : value,
+    text.nullish(),
+  ),
   status: z.union([text, z.number().finite()]).nullish(),
 });
 export type GradeRow = z.infer<typeof gradeRowSchema>;
