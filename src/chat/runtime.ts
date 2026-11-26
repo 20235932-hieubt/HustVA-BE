@@ -11,6 +11,7 @@ import { logger } from '../observability/logger.js';
 import { performance } from 'node:perf_hooks';
 import { getToolManager } from '../tools/runtime.js';
 import { createRoutingModel, createToolSelector } from '../tools/selector.js';
+import { MongoStudentSubjectStore } from './student-subject-repository.js';
 
 export const chatShutdown = new AbortController();
 let pending: Promise<ChatService> | undefined;
@@ -32,6 +33,10 @@ export function getChatService(): Promise<ChatService> {
       await connection.client.connect();
       const store = new MongoConversationStore(connection.db);
       await store.init();
+      const subjects = config.gradesEnabled
+        ? new MongoStudentSubjectStore(connection.db)
+        : undefined;
+      await subjects?.init();
       logger.info('chat.runtime.ready', {
         durationMs: performance.now() - started,
       });
@@ -42,7 +47,8 @@ export function getChatService(): Promise<ChatService> {
         createChatAgent(createGeminiModel(config), knowledge, config),
         config.timeoutMs,
         getToolManager(),
-        createToolSelector(createRoutingModel(config)),
+        createToolSelector(createRoutingModel(config), config.gradesEnabled),
+        subjects ? { enabled: true, subjects } : undefined,
       );
     } catch {
       logger.error('chat.runtime.failed', {

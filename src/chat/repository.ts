@@ -26,6 +26,7 @@ export interface RequestRecord {
   expiresAt: Date;
   result?: ChatResult;
   errorCode?: string;
+  nonReplayable?: boolean;
 }
 export interface ConversationStore {
   create(hash: string): Promise<Conversation>;
@@ -154,6 +155,7 @@ export class MongoConversationStore implements ConversationStore {
           result,
           status: 'completed',
           retainInContext: record.retainInContext,
+          ...(record.nonReplayable ? { nonReplayable: true } : {}),
         },
       },
     );

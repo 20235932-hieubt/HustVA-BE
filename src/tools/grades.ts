@@ -78,18 +78,20 @@ export function renderGrades(data: unknown): string | undefined {
     'Giữ nguyên các lần học theo nguồn HUST; không tự tính GPA/CPA.',
   ];
   let semester: string | undefined;
+  let shown = 0;
   for (const row of sorted.slice(0, 30)) {
+    const line = `- ${row.courseId} (lớp ${row.classId}): quá trình ${value(row.processMark)}; cuối kỳ ${value(row.examMark)}; điểm chữ ${value(row.finalMarkLetter)}; trạng thái nguồn ${value(row.status)}.`;
+    if (lines.join('\n').length + line.length > 9000) break;
     if (semester !== row.semester) {
       semester = row.semester;
       lines.push(`\nHọc kỳ ${semester}:`);
     }
-    lines.push(
-      `- ${row.courseId} (lớp ${row.classId}): quá trình ${value(row.processMark)}; cuối kỳ ${value(row.examMark)}; điểm chữ ${value(row.finalMarkLetter)}; trạng thái nguồn ${value(row.status)}.`,
-    );
+    lines.push(line);
+    shown++;
   }
-  if (rows.length > 30)
+  if (rows.length > shown)
     lines.push(
-      'Chỉ hiển thị 30 dòng đầu. Hãy lọc theo học kỳ hoặc mã học phần để xem cụ thể hơn.',
+      `Chỉ hiển thị ${shown} dòng đầu. Hãy lọc theo học kỳ hoặc mã học phần để xem cụ thể hơn.`,
     );
   return lines.join('\n');
 }

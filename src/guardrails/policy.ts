@@ -38,6 +38,7 @@ export function redactPersonalData(
 export function checkInput(
   text: string,
   privacy?: PrivacySession,
+  options: { allowGradeLookup?: boolean } = {},
 ): {
   message: string;
   result?: ChatResult;
@@ -119,6 +120,11 @@ export function checkInput(
   if (
     /(?:xem|tra cuu|kiem tra).{0,30}(?:diem|ho so|trang thai don).{0,20}(?:cua em|cua toi|cua minh)/u.test(
       value,
+    ) &&
+    !(
+      options.allowGradeLookup &&
+      /diem/u.test(value) &&
+      !/ho so|trang thai don/u.test(value)
     )
   )
     return {

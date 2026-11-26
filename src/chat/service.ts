@@ -4,7 +4,18 @@ import type { AgentInput } from '../agent/graph.js';
 import { runChatTool, type ChatTools } from '../tools/chat.js';
 import type { ToolSelector } from '../tools/selector.js';
 import { addTraceContext, logger, withTrace } from '../observability/logger.js';
-import { checkInput, hasSecret, normalize } from '../guardrails/policy.js';
+import {
+  checkInput,
+  hasSecret,
+  normalize,
+  fallback,
+} from '../guardrails/policy.js';
+import { isGradeTool } from '../tools/grades.js';
+import {
+  isGradeLookupRequest,
+  prepareStudentSubjects,
+  type StudentSubjectStore,
+} from '../tools/student-subject.js';
 import {
   PrivacySession,
   privacyVersion,
@@ -13,6 +24,7 @@ import {
 } from '../privacy/session.js';
 import {
   ChatError,
+  reply,
   messageSchema,
   type ChatResult,
   type MessageInput,
@@ -59,6 +71,7 @@ export function publicRecord(record: RequestRecord) {
     result: record.result ?? null,
     errorCode: record.errorCode,
     createdAt: record.createdAt,
+    replayable: !record.nonReplayable,
   };
 }
 
@@ -69,6 +82,9 @@ export class ChatService {
     private readonly timeoutMs = 30_000,
     private readonly tools?: ChatTools,
     private readonly selector?: ToolSelector,
+    private readonly gradeOptions:
+      | { enabled: boolean; subjects: StudentSubjectStore }
+      | undefined = undefined,
   ) {}
   async create() {
     const token = randomBytes(32).toString('base64url');
@@ -169,7 +185,15 @@ export class ChatService {
   ) {
     const started = performance.now();
     logger.info('chat.turn.received');
-    const screen = checkInput(input.message, privacy);
+    const screen = checkInput(input.message, privacy, {
+      allowGradeLookup: this.gradeOptions?.enabled,
+    });
+    if (
+      !screen.result &&
+      !this.gradeOptions?.enabled &&
+      isGradeLookupRequest(input.message)
+    )
+      screen.result = fallback('requires_authentication');
     // Preserve meaning for LLM routing while masking detected identifiers locally.
     const routingMessage =
       !screen.result && this.tools && this.selector
@@ -188,7 +212,6 @@ export class ChatService {
     const safeMessage = screen.retainUser
       ? privacy.pseudonymize(input.message)
       : screen.message;
-    privacy.seal();
     const fingerprint = privacy.fingerprint({
       message: normalize(input.message),
       context: input.context ?? {},
@@ -200,6 +223,12 @@ export class ChatService {
           409,
           'REQUEST_ID_REUSED',
           'requestId đã dùng cho nội dung khác.',
+        );
+      if (existing.nonReplayable)
+        throw new ChatError(
+          409,
+          'REQUEST_NOT_REPLAYABLE',
+          'Kết quả điểm cá nhân không được lưu để phát lại. Hãy gửi yêu cầu mới nếu cần tra cứu lại.',
         );
       if (existing.status === 'completed' && existing.result) {
         logger.info('chat.turn.replayed', {
@@ -270,6 +299,16 @@ export class ChatService {
       signal.throwIfAborted();
       await this.store.begin(record);
       logger.debug('chat.request.persisted');
+      const prepared =
+        !screen.result && this.gradeOptions?.enabled
+          ? prepareStudentSubjects(
+              input.message,
+              await this.gradeOptions.subjects.load(id, tokenHash(token)),
+              privacy,
+              conversation.expiresAt,
+            )
+          : undefined;
+      privacy.seal();
       const mergedContext = publicContext({
         ...conversation.context,
         ...context,
@@ -287,16 +326,54 @@ export class ChatService {
           status: screen.result.status,
           reasonCode: screen.result.reasonCode,
         });
+      // A declaration stores context without sending it through the knowledge graph.
+      const subjectResult = prepared?.references.conflict
+        ? reply(
+            'needs_clarification',
+            'Có nhiều MSSV hoặc thông tin đối tượng chưa khớp. Bạn xác định lại sinh viên cần tra cứu giúp mình nhé.',
+            'HUST_SUBJECT_AMBIGUOUS',
+          )
+        : prepared?.next && !isGradeLookupRequest(input.message)
+          ? reply(
+              'answered',
+              'Mình đã ghi nhận đối tượng tra cứu trong phiên này. Bạn muốn xem điểm học kỳ hay học phần nào?',
+              'HUST_SUBJECT_RECORDED',
+            )
+          : undefined;
       const toolPlan =
-        routingMessage !== undefined && this.selector
+        !subjectResult && routingMessage !== undefined && this.selector
           ? await abortable(
-              this.selector.select(routingMessage, signal),
+              this.selector.select(
+                routingMessage,
+                signal,
+                prepared?.references,
+              ),
               signal,
             )
           : undefined;
       if (toolPlan) record.retainInContext = false;
+      // Never answer a personal grade request using retrieval/model-generated numbers.
+      const gradeFallback =
+        !screen.result &&
+        !subjectResult &&
+        isGradeLookupRequest(input.message) &&
+        (!toolPlan || !isGradeTool(toolPlan.id))
+          ? reply(
+              'needs_clarification',
+              'Bạn cho biết MSSV cần tra cứu (nếu chưa cung cấp), mã học kỳ hoặc mã học phần cụ thể nhé.',
+              'HUST_GRADES_CLARIFICATION',
+            )
+          : undefined;
+      if (isGradeTool(toolPlan?.id ?? '') && !this.gradeOptions?.enabled)
+        throw new ChatError(
+          403,
+          'HUST_GRADES_DISABLED',
+          'Tra cứu điểm chưa được bật trong môi trường này.',
+        );
       const result =
         screen.result ??
+        subjectResult ??
+        gradeFallback ??
         (toolPlan && this.tools
           ? await abortable(runChatTool(toolPlan, this.tools, signal), signal)
           : await abortable(
@@ -307,11 +384,34 @@ export class ChatService {
               signal,
             ));
       signal.throwIfAborted();
+      if (prepared?.next && this.gradeOptions?.enabled)
+        await this.gradeOptions.subjects.save(
+          id,
+          tokenHash(token),
+          runId,
+          prepared.next,
+        );
+      const privateTurn =
+        isGradeTool(toolPlan?.id ?? '') ||
+        Boolean(subjectResult) ||
+        Boolean(prepared?.next);
+      if (privateTurn) record.retainInContext = false;
+      const storedResult = isGradeTool(toolPlan?.id ?? '')
+        ? {
+            ...reply(
+              'handoff',
+              'Kết quả điểm cá nhân chỉ được trả trực tiếp, không lưu trong lịch sử. Gửi yêu cầu mới để tra cứu lại.',
+              'HUST_GRADES_NOT_STORED',
+            ),
+            retrievalMode: 'hust_api' as const,
+          }
+        : result;
+      if (isGradeTool(toolPlan?.id ?? '')) record.nonReplayable = true;
       // Context from blocked/support messages must not poison later turns.
       await this.store.complete(
         record,
         screen.retainUser ? mergedContext : publicContext(conversation.context),
-        result,
+        storedResult,
       );
       logger.info('chat.turn.completed', {
         status: result.status,

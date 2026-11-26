@@ -2,6 +2,17 @@ import { fold } from '../guardrails/policy.js';
 import type { PrivacySession } from '../privacy/session.js';
 import { studentIdSchema } from './grades.js';
 
+export function isGradeLookupRequest(message: string): boolean {
+  const value = fold(message);
+  return (
+    /(?:diem|bang diem)/u.test(value) &&
+    /(?:xem|tra cuu|kiem tra|cho|lay|mon|hoc ky|ky nay|ky truoc|cua)/u.test(
+      value,
+    ) &&
+    !/(?:diem chuan|cach tinh|quy dinh|thang diem|dieu kien)/u.test(value)
+  );
+}
+
 /** Self-declared session context only. Never an assertion of student ownership. */
 export interface StudentSubjects {
   self?: string;
@@ -35,15 +46,21 @@ export function prepareStudentSubjects(
 ): { references: SubjectReferences; next?: StudentSubjects } {
   const state = previous && previous.expiresAt > now ? previous : undefined;
   const masked = privacy.pseudonymize(message);
+  const value = fold(message);
+  const studentContext =
+    /mssv|ma so sinh vien|studentid/u.test(value) ||
+    isGradeLookupRequest(message);
+  const unrelatedIdentifier = /cccd|cmnd|so tai khoan/u.test(value);
   const explicitRefs = privacy
     .references(masked)
     .filter(
       (ref) =>
+        studentContext &&
+        !unrelatedIdentifier &&
         ref.startsWith('[[PII_ID_') &&
         studentIdSchema.safeParse(privacy.restore(ref)).success,
     );
   const ids = [...new Set(explicitRefs.map((ref) => privacy.restore(ref)))];
-  const value = fold(message);
   const selfStatement =
     /(?:mssv|ma so sinh vien)\s+(?:cua\s+)?(?:toi|em|minh)\s*(?:la|[:=])/u.test(
       value,

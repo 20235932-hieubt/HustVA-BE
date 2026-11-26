@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { reply, type ChatResult } from '../chat/contracts.js';
 
 import type { ToolResult } from './contracts.js';
+import { isGradeTool, renderGrades } from './grades.js';
 
 export interface ChatTools {
   execute(
@@ -82,6 +83,7 @@ function semesterLabel(code: string): string {
 }
 
 function render(plan: ToolPlan, data: unknown): string | undefined {
+  if (isGradeTool(plan.id)) return renderGrades(data);
   switch (plan.id) {
     case 'get_semesters': {
       const parsed = semesterSchema.safeParse(data);
@@ -173,9 +175,11 @@ export async function runChatTool(
   if (result.status === 'empty')
     return response(
       'insufficient_evidence',
-      plan.id.startsWith('search_')
-        ? 'Mình chưa tìm thấy kết quả phù hợp. Bạn thử nhập tên hoặc từ khóa khác nhé.'
-        : 'Mình chưa tìm thấy thông tin này. Bạn thử lại sau nhé.',
+      isGradeTool(plan.id)
+        ? 'HUST chưa trả dữ liệu điểm cho yêu cầu này. Điều này không có nghĩa là điểm bằng 0 hoặc chưa đăng ký học.'
+        : plan.id.startsWith('search_')
+          ? 'Mình chưa tìm thấy kết quả phù hợp. Bạn thử nhập tên hoặc từ khóa khác nhé.'
+          : 'Mình chưa tìm thấy thông tin này. Bạn thử lại sau nhé.',
       'HUST_TOOL_EMPTY',
     );
   if (result.status !== 'success') {
