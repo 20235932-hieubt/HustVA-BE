@@ -448,6 +448,59 @@ Không commit file tài khoản, `.env`, test, fixture hoặc kết quả test. 
 build lại `dist` trước khi chạy. Kiểm thử bằng dữ liệu giả lập không chứng minh
 HUST thật, Microsoft SSO hoặc hạ tầng Mongo đang hoạt động.
 
+## Tra cứu lịch thi cá nhân
+
+Tool `get_exams` gọi Partner `/exams`, dùng MSSV từ tài khoản demo đã đăng nhập.
+Đầu vào thực thi là JSON strict `{"semester":"20261"}`; không nhận `studentId`
+do người dùng truyền. Management dùng MSSV thử nghiệm đã cấu hình trong
+`DEMO_STUDENT_ID` (8 hoặc 9 chữ số); chat luôn dùng mapping của principal.
+Không cần key hoặc API HUST mới ngoài cấu hình Partner hiện có.
+
+Để bật thử, giữ cấu hình đăng nhập demo hợp lệ, thêm `CHAT_EXAMS_ENABLED=true`
+vào `.env`, restart backend và bật `get_exams` trên trang quản trị tools hoặc
+`PATCH /api/v1/tools/get_exams` với body `{"enabled":true}` và management bearer.
+Không dùng token quản trị ở frontend chat. Tool và cờ chat đều tắt mặc định;
+`CHAT_EXAMS_ENABLED` độc lập với `CHAT_GRADES_ENABLED`. `.env.example` chỉ có
+giá trị mẫu, không ghi đè `.env` hiện có khi cập nhật cấu hình.
+
+- “Lịch thi của tôi kỳ 20261”: một lần gọi tool lịch thi.
+- “Lịch thi kỳ này”: resolve qua `get_semesters`, sau đó `get_exams`; cần bật
+  semesters và `CHAT_MAX_TOOL_CALLS`, `CHAT_MAX_TOOL_ROUNDS` đều ít nhất 2.
+  Đây là ngân sách tool logic; retry HTTP vẫn hữu hạn trong deadline chung.
+- “Xem lịch thi của tôi”: hỏi kỳ, không bắt nhập lại MSSV. Câu tiếp chỉ có mã
+  kỳ có thể tiếp tục yêu cầu; “kỳ đó” chỉ dùng metadata backend còn hạn.
+- “Kỳ trước/kỳ tới” chưa có mã: hỏi mã cụ thể, không suy ra quy tắc kỳ hè.
+
+Lịch thi trả bảng Markdown, giờ `Asia/Ho_Chi_Minh`, giữ các ca thi riêng biệt.
+Tối đa 30 buổi/khoảng 9.000 ký tự; báo rõ khi chưa hiển thị hết. Timestamp dùng
+milliseconds; chuỗi ngày nguồn được giữ nguyên, không parse ngày tự do. Đối
+chiếu mâu thuẫn hỗ trợ `dd/MM/yyyy` hoặc `yyyy-MM-dd`, tùy chọn giờ `HH:mm[:ss]`
+không có timezone; chuỗi khác chỉ hiển thị nguồn để người dùng đối chiếu.
+Text nguồn có control character, URL/email hoặc dạng secret bị từ chối; response
+sai cấu trúc báo `HUST_EXAMS_DATA_INVALID`, không bỏ lén hàng lỗi.
+
+Kỳ hè trả giới hạn API thay vì gọi `/exams`; null/mảng rỗng nghĩa là HUST chưa
+trả dữ liệu, không kết luận không phải thi. Timeout/error không thay bằng lịch
+cũ hoặc số liệu do model tạo. Tra quy chế thi vẫn dùng luồng kiến thức.
+
+Quyền tài khoản được kiểm tra trước/sau upstream và trước phản hồi. Lịch thi
+không gửi Gemini, không vào log/history/request replay; history chỉ giữ
+placeholder. Metadata nội bộ chỉ gồm mã kỳ và hạn sử dụng tối đa 30 phút,
+thuộc đúng conversation/owner, tìm trong 10 lượt gần nhất; không xuất metadata
+qua API history và không dùng public context do client gửi để cấp quyền.
+Logout/hết hạn giữa lượt loại kết quả muộn; không thu hồi được lời gọi đã gửi HUST.
+
+Rollback: tắt `CHAT_EXAMS_ENABLED`, restart và tắt `get_exams` qua management;
+không mở tra cứu lịch thi cho guest. Không cần migration bắt buộc: trường routing
+metadata mới là tùy chọn trên request record. Không thay đổi layout frontend.
+
+Test/fixture/runner/kết quả chỉ giữ local ở `../kiem-thu/be/exams/`; build backend
+rồi chạy `node ../kiem-thu/be/exams/run-tests.mjs` từ repo backend hoặc
+`node kiem-thu/be/exams/run-tests.mjs` từ workspace root. Runner cũng cần các bộ
+hồi quy local và dependencies frontend để kiểm tra Markdown/auth transport;
+không thiết lập CI phụ thuộc các file ngoài repo. Kiểm thử mock không thay thế
+xác minh API HUST, Gemini thật hoặc kiểm tra trực quan trên trình duyệt.
+
 ## Trace và kiểm tra code
 
 ### Định dạng câu trả lời
