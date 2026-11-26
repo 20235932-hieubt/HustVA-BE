@@ -1,3 +1,5 @@
+import { demoToolAccess } from '../auth/tool-access.js';
+import { authRequired } from '../auth/demo-service.js';
 import type { DemoPrincipal } from '../auth/demo-service.js';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
@@ -5,12 +7,7 @@ import type { AgentInput } from '../agent/graph.js';
 import { runChatTool, type ChatTools } from '../tools/chat.js';
 import type { ToolSelector } from '../tools/selector.js';
 import { addTraceContext, logger, withTrace } from '../observability/logger.js';
-import {
-  checkInput,
-  hasSecret,
-  normalize,
-  fallback,
-} from '../guardrails/policy.js';
+import { checkInput, hasSecret, normalize } from '../guardrails/policy.js';
 import { isGradeTool } from '../tools/grades.js';
 import {
   isGradeLookupRequest,
@@ -217,14 +214,27 @@ export class ChatService {
     const started = performance.now();
     logger.info('chat.turn.received');
     const screen = checkInput(input.message, privacy, {
-      allowGradeLookup: this.gradeOptions?.enabled,
+      allowGradeLookup: this.gradeOptions?.enabled && Boolean(principal),
     });
     if (
       !screen.result &&
-      !this.gradeOptions?.enabled &&
+      (!this.gradeOptions?.enabled || !principal) &&
       isGradeLookupRequest(input.message)
     )
-      screen.result = fallback('requires_authentication');
+      screen.result = reply(
+        'requires_authentication',
+        'Vui l?ng ??ng nh?p t?i kho?n demo tr?n trang chat tr?c ti?p ?? tra c?u ?i?m c?a b?n.',
+        'DEMO_AUTH_REQUIRED',
+      );
+    if (
+      screen.result?.status === 'requires_authentication' &&
+      isGradeLookupRequest(input.message)
+    )
+      screen.result = reply(
+        'requires_authentication',
+        'Vui l?ng ??ng nh?p t?i kho?n demo tr?n trang chat tr?c ti?p ?? tra c?u ?i?m c?a b?n.',
+        'DEMO_AUTH_REQUIRED',
+      );
     // Preserve meaning for LLM routing while masking detected identifiers locally.
     const routingMessage =
       !screen.result && this.tools && this.selector
@@ -239,7 +249,7 @@ export class ChatService {
           'Context không được chứa định danh, thông tin xác thực hoặc chỉ dẫn vượt quyền.',
         );
     }
-    await this.owned(id, token, principal);
+    const ownedConversation = await this.owned(id, token, principal);
     const safeMessage = screen.retainUser
       ? privacy.pseudonymize(input.message)
       : screen.message;
@@ -334,11 +344,22 @@ export class ChatService {
         !screen.result && this.gradeOptions?.enabled
           ? prepareStudentSubjects(
               input.message,
-              await this.gradeOptions.subjects.load(id, tokenHash(token)),
+              principal
+                ? undefined
+                : await this.gradeOptions.subjects.load(id, tokenHash(token)),
               privacy,
               conversation.expiresAt,
             )
           : undefined;
+      if (prepared && principal) {
+        const selfRef = privacy.pseudonymize(principal.studentId);
+        prepared.references.selfRef = selfRef;
+        prepared.references.activeRef = prepared.references.explicitRefs.length
+          ? prepared.references.activeRef
+          : selfRef;
+        // Authenticated identity is never written as a self-declared binding.
+        prepared.next = undefined;
+      }
       privacy.seal();
       const mergedContext = publicContext({
         ...conversation.context,
@@ -401,12 +422,28 @@ export class ChatService {
           'HUST_GRADES_DISABLED',
           'Tra cứu điểm chưa được bật trong môi trường này.',
         );
+      if (isGradeTool(toolPlan?.id ?? '')) {
+        if (
+          !principal ||
+          ownedConversation.ownerAccountId !== principal.accountId
+        )
+          throw authRequired();
+        await principal.validate();
+      }
       const result =
         screen.result ??
         subjectResult ??
         gradeFallback ??
         (toolPlan && this.tools
-          ? await abortable(runChatTool(toolPlan, this.tools, signal), signal)
+          ? await abortable(
+              runChatTool(
+                toolPlan,
+                this.tools,
+                signal,
+                principal ? demoToolAccess(principal) : undefined,
+              ),
+              signal,
+            )
           : await abortable(
               this.run(
                 { message: safeMessage, context: mergedContext, history },
@@ -415,6 +452,7 @@ export class ChatService {
               signal,
             ));
       signal.throwIfAborted();
+      if (isGradeTool(toolPlan?.id ?? '')) await principal?.validate();
       if (prepared?.next && this.gradeOptions?.enabled)
         await this.gradeOptions.subjects.save(
           id,
@@ -444,6 +482,7 @@ export class ChatService {
         screen.retainUser ? mergedContext : publicContext(conversation.context),
         storedResult,
       );
+      if (isGradeTool(toolPlan?.id ?? '')) await principal?.validate();
       logger.info('chat.turn.completed', {
         status: result.status,
         reasonCode: result.reasonCode,

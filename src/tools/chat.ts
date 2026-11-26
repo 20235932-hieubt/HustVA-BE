@@ -176,6 +176,18 @@ export async function runChatTool(
     );
   }
   signal.throwIfAborted();
+  if (result.errorCode === 'DEMO_AUTH_REQUIRED')
+    return response(
+      'requires_authentication',
+      'Phi?n demo ?? h?t h?n. Vui l?ng ??ng nh?p l?i.',
+      'DEMO_AUTH_REQUIRED',
+    );
+  if (result.errorCode === 'HUST_STUDENT_FORBIDDEN')
+    return response(
+      'blocked',
+      'B?n ch? ???c tra c?u ?i?m c?a t?i kho?n ?ang ??ng nh?p.',
+      'HUST_STUDENT_FORBIDDEN',
+    );
   if (result.status === 'empty')
     return response(
       'insufficient_evidence',
