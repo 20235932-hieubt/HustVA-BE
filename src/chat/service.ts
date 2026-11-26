@@ -33,6 +33,9 @@ import {
   type RequestRecord,
 } from './repository.js';
 
+const isPrivateTool = (id: string) =>
+  isGradeTool(id) || id === 'get_student_info' || id === 'get_academic_result';
+
 export type AgentRunner = (
   input: AgentInput,
   signal: AbortSignal,
@@ -433,7 +436,7 @@ export class ChatService {
           'HUST_GRADES_DISABLED',
           'Tra cứu điểm chưa được bật trong môi trường này.',
         );
-      if (isGradeTool(toolPlan?.id ?? '')) {
+      if (isPrivateTool(toolPlan?.id ?? '')) {
         if (
           !principal ||
           ownedConversation.ownerAccountId !== principal.accountId
@@ -463,7 +466,7 @@ export class ChatService {
               signal,
             ));
       signal.throwIfAborted();
-      if (isGradeTool(toolPlan?.id ?? '')) await principal?.validate();
+      if (isPrivateTool(toolPlan?.id ?? '')) await principal?.validate();
       if (prepared?.next && this.gradeOptions?.enabled)
         await this.gradeOptions.subjects.save(
           id,
@@ -472,28 +475,32 @@ export class ChatService {
           prepared.next,
         );
       const privateTurn =
-        isGradeTool(toolPlan?.id ?? '') ||
+        isPrivateTool(toolPlan?.id ?? '') ||
         Boolean(subjectResult) ||
         Boolean(prepared?.next);
       if (privateTurn) record.retainInContext = false;
-      const storedResult = isGradeTool(toolPlan?.id ?? '')
+      const storedResult = isPrivateTool(toolPlan?.id ?? '')
         ? {
             ...reply(
               'handoff',
-              'Kết quả điểm cá nhân chỉ được trả trực tiếp, không lưu trong lịch sử. Gửi yêu cầu mới để tra cứu lại.',
-              'HUST_GRADES_NOT_STORED',
+              isGradeTool(toolPlan?.id ?? '')
+                ? 'Kết quả điểm cá nhân chỉ được trả trực tiếp, không lưu trong lịch sử. Gửi yêu cầu mới để tra cứu lại.'
+                : 'Đã hiển thị hồ sơ sinh viên. Nội dung hồ sơ không được lưu; hãy hỏi lại để xem.',
+              isGradeTool(toolPlan?.id ?? '')
+                ? 'HUST_GRADES_NOT_STORED'
+                : 'HUST_PROFILE_NOT_STORED',
             ),
             retrievalMode: 'hust_api' as const,
           }
         : result;
-      if (isGradeTool(toolPlan?.id ?? '')) record.nonReplayable = true;
+      if (isPrivateTool(toolPlan?.id ?? '')) record.nonReplayable = true;
       // Context from blocked/support messages must not poison later turns.
       await this.store.complete(
         record,
         screen.retainUser ? mergedContext : publicContext(conversation.context),
         storedResult,
       );
-      if (isGradeTool(toolPlan?.id ?? '')) await principal?.validate();
+      if (isPrivateTool(toolPlan?.id ?? '')) await principal?.validate();
       logger.info('chat.turn.completed', {
         status: result.status,
         reasonCode: result.reasonCode,

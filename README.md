@@ -208,6 +208,18 @@ Replay cùng UUID và nội dung gốc tái tạo mapping trong RAM để trả 
 
 ## HUST tools và tool management
 
+Sau khi tích hợp origin/main, giữ cả tool hồ sơ `get_student_info` (chọn trường
+identity/class/program/status/advisor/cpa/gpa/credits/warning) và các tool điểm.
+`get_academic_result` là tool nội bộ cho hồ sơ, không đưa vào schema model.
+Hồ sơ và kết quả học tập dùng MSSV từ phiên demo còn hiệu lực, kiểm tra owner
+conversation và không lưu dữ liệu cá nhân vào history/replay. DEMO_STUDENT_ID
+chỉ còn là mapping dự phòng cho management đã xác thực, không thay thế mapping
+tài khoản đang đăng nhập. Không tự gán một hồ sơ demo chung cho mọi khách chat.
+
+Gemini giữ key pool và ngân sách 15 lượt/phút chung, đồng thời tích hợp deadline
+từng attempt và retry lỗi quá tải từ origin. Retry không nhân đôi bên trong SDK;
+mỗi attempt đều qua bộ đếm RPM, lỗi 429 vẫn dừng theo cooldown của project.
+
 Catalog gồm **5 tool dữ liệu dùng chung** và **2 tool điểm cá nhân tắt mặc định**
 từ HUST Partner. Các tool dùng chung không cần MSSV; tool điểm nhận MSSV 8 hoặc
 9 chữ số. Chat chỉ cho tài khoản demo tra cứu MSSV đã được người vận hành gắn sẵn.
@@ -219,6 +231,8 @@ từ HUST Partner. Các tool dùng chung không cần MSSV; tool điểm nhận 
 | `get_advanced_programs` | `/student/kscs`             | `{ "programId": "IT1" }`   |
 | `search_teachers`       | `/teacher/search`           | `{ "keyWord": "từ khóa" }` |
 | `search_companies`      | `/company/search`           | `{ "keyWord": "từ khóa" }` |
+| `get_student_info`      | `/student/info`             | `{}` (MSSV do backend gắn) |
+| `get_academic_result`   | `/academicresult`           | `{ "semester": "20252" }`  |
 
 Các tool hồ sơ sinh viên, thời khóa biểu, lịch thi, chương trình đào tạo,
 đề tài, eHUST, workflow bảng điểm và cache học phần chưa nằm trong giai đoạn này;
@@ -234,6 +248,7 @@ Luồng tri thức sử dụng RAG trên kho tài liệu đã embed; `StubKnowle
 | Chương trình kỹ sư chuyên sâu của IT1 | `get_advanced_programs` |
 | Tìm giảng viên tên Nguyễn             | `search_teachers`       |
 | Tìm công ty FPT                       | `search_companies`      |
+| Xem hồ sơ của tôi / Cố vấn của tôi    | `get_student_info`      |
 
 [selector.ts](src/tools/selector.ts) mặc định đăng ký schema 5 tool dùng chung và hai nhánh điều khiển
 hỏi lại/chuyển luồng tri thức với Gemini. Mỗi lượt chọn tối đa một tool. Backend

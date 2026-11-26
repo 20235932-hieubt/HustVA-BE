@@ -9,7 +9,9 @@ export function isGradeLookupRequest(message: string): boolean {
     /(?:xem|tim|tra cuu|kiem tra|cho|lay|mon|hoc ky|ky nay|ky truoc|cua|sinh vien|mssv|ma so sinh vien)/u.test(
       value,
     ) &&
-    !/(?:diem chuan|cach tinh|quy dinh|thang diem|dieu kien)/u.test(value)
+    !/(?:diem chuan|cach tinh|quy dinh|thang diem|dieu kien|cpa|gpa|diem trung binh|diem tich luy)/u.test(
+      value,
+    )
   );
 }
 

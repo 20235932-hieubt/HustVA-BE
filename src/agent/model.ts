@@ -1,3 +1,4 @@
+import { withModelRetry } from './retry.js';
 import type {
   AIMessage,
   AIMessageChunk,
@@ -111,9 +112,13 @@ export function createGeminiModel(
             };
             clients.set(apiKey, client);
           }
-          const result = await (
-            options.final ? client.finalOnly : client.bound
-          ).invoke(protectedMessages, { signal });
+          const selected = options.final ? client.finalOnly : client.bound;
+          const result = await withModelRetry(
+            (attempt) =>
+              selected.invoke(protectedMessages, { signal: attempt }),
+            signal,
+            { attempts: 1 },
+          );
           signal.throwIfAborted();
           return result;
         }, signal);

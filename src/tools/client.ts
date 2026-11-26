@@ -17,6 +17,10 @@ export class HustClient {
     );
   }
 
+  studentConfigured(): boolean {
+    return Boolean(this.config.studentId);
+  }
+
   async call(
     tool: ToolDefinition,
     input: Record<string, unknown>,
@@ -51,6 +55,12 @@ export class HustClient {
     url.searchParams.set('token', this.config.partnerToken!);
     for (const [key, value] of Object.entries(input))
       if (value !== undefined) url.searchParams.set(key, String(value));
+    if (tool.studentBound) {
+      // ToolManager supplies the authenticated mapping after validating caller arguments.
+      if (typeof input.studentId !== 'string')
+        throw new UpstreamError('STUDENT_NOT_CONFIGURED');
+      url.searchParams.set('studentId', input.studentId);
+    }
     const headers = {
       Accept: 'application/json',
       Authorization: this.config.partnerAuthorization!,

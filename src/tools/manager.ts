@@ -154,7 +154,12 @@ export class ToolManager {
     if (!parsed.success)
       return base('invalid_arguments', 'TOOL_ARGUMENTS_INVALID');
     const args = { ...parsed.data };
-    if (isGradeTool(id)) {
+    if (tool.studentBound)
+      args.studentId =
+        access?.kind === 'demo'
+          ? access.principal?.studentId
+          : this.config.studentId;
+    if (isGradeTool(id) || tool.studentBound) {
       try {
         await authorizeGrade(args.studentId, access);
       } catch (error) {
@@ -170,6 +175,8 @@ export class ToolManager {
     if (!settings.enabled) return base('disabled', 'TOOL_DISABLED');
     if (!this.client.configured())
       return base('not_configured', 'UPSTREAM_NOT_CONFIGURED');
+    if (tool.studentBound && !args.studentId)
+      return base('not_configured', 'STUDENT_NOT_CONFIGURED');
     if (this.active >= 8) return base('busy', 'TOOL_CONCURRENCY_LIMIT');
     const deadline = AbortSignal.timeout(settings.timeoutMs);
     const signal = callerSignal
@@ -195,7 +202,8 @@ export class ToolManager {
         settings.retries,
         signal,
       );
-      if (isGradeTool(id)) await authorizeGrade(args.studentId, access);
+      if (isGradeTool(id) || tool.studentBound)
+        await authorizeGrade(args.studentId, access);
       const data = isGradeTool(id) ? normalizeGrades(payload) : payload;
       result = {
         ...base(

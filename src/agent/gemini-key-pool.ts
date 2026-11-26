@@ -145,6 +145,13 @@ export class GeminiKeyPool {
               500 * 2 ** attempt + Math.floor(Math.random() * 200),
               signal,
             );
+          else if (attempt + 1 < this.#attempts) {
+            // Retry transient overload with one key, reserving RPM for every attempt.
+            // Auth failures and project quota (429) never reach this branch.
+            await this.sleep(1000 * 2 ** attempt, signal);
+            tried.delete(selected);
+            selected.availableAt = this.now();
+          }
         } else {
           throw new ChatError(
             503,

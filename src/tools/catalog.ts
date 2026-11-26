@@ -16,6 +16,10 @@ export interface ToolDefinition {
   warnings: string[];
   defaultEnabled: boolean;
   timeoutMs: number;
+  /** ToolManager adds the authenticated studentId; the model and caller cannot set it. */
+  studentBound?: boolean;
+  /** Called by the backend only; never offered to the model for selection. */
+  internal?: boolean;
 }
 
 function partner(
@@ -88,9 +92,29 @@ export const toolCatalog: readonly ToolDefinition[] = [
     defaultEnabled: false,
     timeoutMs: 10000,
     warnings: [
-      'Dữ liệu điểm cá nhân; chưa có xác thực chủ sở hữu MSSV. Chỉ dùng trong môi trường thử được kiểm soát.',
+      'Dữ liệu điểm cá nhân; chỉ tài khoản được gắn đúng MSSV hoặc management đã xác thực được phép truy cập.',
     ],
   })),
+  {
+    ...partner(
+      'get_student_info',
+      'student/info',
+      'Hồ sơ của chính sinh viên đang hỏi: họ tên, lớp, ngành, trường/khoa, trạng thái học, cố vấn học tập, CPA, GPA, tín chỉ tích lũy, mức cảnh báo học tập.',
+      {},
+    ),
+    studentBound: true,
+  },
+  {
+    // Part of get_student_info: the backend picks the latest main semester with results.
+    ...partner(
+      'get_academic_result',
+      'academicresult',
+      'Kết quả học tập một học kỳ của chính sinh viên: GPA, CPA, tín chỉ, mức cảnh báo.',
+      { semester: z.string().regex(/^\d{4}[12]$/u) },
+    ),
+    studentBound: true,
+    internal: true,
+  },
 ];
 
 export function findTool(id: string): ToolDefinition | undefined {

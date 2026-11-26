@@ -19,6 +19,27 @@ const normalize = (value: string) =>
     .replace(/[\u200B-\u200D\uFEFF]/gu, '')
     .trim();
 
+// Capitalised phrases that are places, institutions or document headings, not people.
+// Without this, crawled titles and answers lose words like "Hà Nội" to the name detector.
+const publicPhraseStart =
+  /^(?:dai hoc|truong|phong|ban|khoa|vien|trung tam|bo|so|quy dinh|quy che|thong bao|quyet dinh|huong dan|ke hoach|chuong|dieu|muc|phu luc|hoc bong|hoc ky|chuong trinh|bach khoa|cong hoa|doc lap|thu vien|ky tuc xa|ta quang buu)\b/u;
+const publicPlaces = new Set([
+  'ha noi',
+  'viet nam',
+  'thanh pho ho chi minh',
+  'ho chi minh',
+  'da nang',
+  'hai phong',
+  'can tho',
+]);
+// Capitalised words that often open a sentence; stripped before treating the rest as a name.
+const leadingWords =
+  /^(?:(?:Theo|Trong|Tại|Với|Về|Từ|Khi|Nếu|Để|Cho|Các|Những|Mỗi|Bạn|Mình|Em|Tôi|Thầy|Cô|Giảng viên|Sinh viên|Học viên|Ông|Bà|Anh|Chị)\s+)+/u;
+const isPublicPhrase = (value: string) => {
+  const folded = fold(value).replace(/\s+/gu, ' ').trim();
+  return publicPlaces.has(folded) || publicPhraseStart.test(folded);
+};
+
 // Public business vocabulary, not user-provided strings. Unrecognized text is
 // deliberately omitted, even when the local PII detector fails to recognize it.
 const topics = [
@@ -111,9 +132,22 @@ export class PrivacySession {
         }[] = [];
         const collect = (pattern: RegExp, kind: Kind, group = 0) => {
           for (const match of part.matchAll(pattern)) {
-            const value = match[group];
+            let value = match[group];
+            let offset = 0;
+            if (kind === 'NAME') {
+              // A capitalised sentence opener ("Theo", "Sinh viên") is not part of a name.
+              const lead = value.match(leadingWords);
+              if (lead) {
+                offset = lead[0].length;
+                value = value.slice(offset);
+                if (!/\s/u.test(value.trim())) continue;
+              }
+              if (isPublicPhrase(value)) continue;
+            }
             const start =
-              match.index! + (group ? match[0].length - value.length : 0);
+              match.index! +
+              offset +
+              (group ? match[0].length - match[group].length : 0);
             const end = start + value.length;
             if (!spans.some((span) => start < span.end && end > span.start))
               spans.push({ start, end, kind, value });
@@ -128,8 +162,9 @@ export class PrivacySession {
         collect(/(?<![\p{L}\d])(?:\+84|0)(?:[ .-]?\d){9,10}(?!\d)/gu, 'PHONE');
         collect(/(?<![\p{L}\d])\d{7,20}(?![\p{L}\d])/gu, 'ID');
         // Best effort only. Lowercase/unrecognized names are also omitted by project().
+        // Title-case words only: all-caps runs are document headings, not names.
         collect(
-          /(?<!\p{L})\p{Lu}[\p{L}\p{M}]*(?:[ \t]+\p{Lu}[\p{L}\p{M}]*){1,5}(?!\p{L})/gu,
+          /(?<!\p{L})\p{Lu}[\p{Ll}\p{M}]*(?:[ \t]+\p{Lu}[\p{Ll}\p{M}]*){1,5}(?!\p{L})/gu,
           'NAME',
         );
         let cursor = 0;

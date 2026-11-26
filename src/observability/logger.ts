@@ -124,6 +124,8 @@ function safeFields(fields: LogFields): Record<string, string | number> {
         'search_companies',
         'get_grades',
         'get_grades_by_course',
+        'get_student_info',
+        'get_academic_result',
       ].includes(value)
         ? value
         : 'unknown';
