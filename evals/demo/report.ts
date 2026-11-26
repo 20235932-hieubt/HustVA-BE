@@ -36,7 +36,7 @@ const warned = (row: DemoRow) => wronglyStopped(row) || wronglySkipped(row);
 const list = (rows: DemoRow[]) =>
   `${rows.length} (STT ${rows.map((row) => row.stt).join(', ') || '—'})`;
 
-function percentile(values: number[], p: number): number {
+export function percentile(values: number[], p: number): number {
   if (!values.length) return 0;
   const sorted = [...values].sort((a, b) => a - b);
   const rank = Math.ceil((p / 100) * sorted.length);

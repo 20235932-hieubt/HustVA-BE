@@ -1,14 +1,19 @@
 // Run chat turns with System One OFF, then ON, and compare.
 //   pnpm tsx evals/demo-system-one.ts [--sites=a,f,b] [--stt=114,2]
-//     [--gap-ms=8000]
+//     [--gap-ms=8000] [--out-dir=<dir> --run=<n>] [--dry-run]
 // Uses the real ChatService with an in-memory store (no HTTP, no Mongo).
 // Needs GEMINI_API_KEY, embedding service 8001 + local vectors and the
 // SYSTEM_ONE_* provider settings in .env (SYSTEM_ONE_MODE is ignored).
 // --gap-ms pauses before every turn (Gemini free-tier quota is per minute).
-// Console: STT and numbers only. Full report: evals/runs/demo-*.md.
+// --out-dir: rows go to <dir>/run-<n>.jsonl as each STT finishes (rerunning
+// the same command skips STTs already there) and the report to
+// <dir>/run-<n>.md once all are done. Without it: evals/runs/demo-*.md.
+// --dry-run lists the cases (and STTs already done) without calling any API.
+// Console: STT and numbers only. Reports with questions stay in evals/runs/.
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { readChatConfig } from '../src/agent/config.js';
@@ -28,6 +33,7 @@ import {
   createRoutingModel,
   createToolSelector,
 } from '../src/tools/selector.js';
+import { buildCases, SUPPORTED_SITES } from './demo/cases.js';
 import { MemoryConversationStore } from './demo/memory-store.js';
 import {
   consoleReport,
@@ -35,53 +41,13 @@ import {
   type DemoRow,
   type RunOutcome,
 } from './demo/report.js';
+import { parseRows, rowLine, type StoredRow } from './demo/rows.js';
 import { questionsByStt } from './probe/csv.js';
 
 // Production logs would interleave with the table; DEMO_LOG_LEVEL overrides.
 process.env.LOG_LEVEL = process.env.DEMO_LOG_LEVEL ?? 'silent';
 
 const CSV = 'evals/cau-hoi-kiem-thu.csv';
-const SUPPORTED_SITES = ['a', 'f', 'b'];
-// demo-plan mục 4. mustPass: the gate must let the turn through;
-// mustKeepSelector: a tool question, site f must not skip the selector.
-const GROUPS = [
-  {
-    site: 'a',
-    name: 'a-chặn',
-    mustPass: false,
-    mustKeepSelector: false,
-    stts: [114, 116, 118, 119, 99, 105, 137, 1, 96, 125, 126],
-  },
-  {
-    site: 'a',
-    name: 'a-đi tiếp',
-    mustPass: true,
-    mustKeepSelector: false,
-    stts: [2, 127, 135],
-  },
-  {
-    site: 'f',
-    name: 'f-bỏ chọn tool',
-    mustPass: true,
-    mustKeepSelector: false,
-    // 14, 16, 22 from mục 4 plus the other step-2 probe document questions.
-    stts: [14, 16, 22, 23, 37, 41, 75, 92, 17, 29],
-  },
-  {
-    site: 'f',
-    name: 'f-giữ chọn tool',
-    mustPass: true,
-    mustKeepSelector: true,
-    stts: [34, 68, 132, 58],
-  },
-  {
-    site: 'b',
-    name: 'b-có số liệu',
-    mustPass: true,
-    mustKeepSelector: false,
-    stts: [14, 16, 20, 22, 23, 75],
-  },
-];
 const SITE_TAG: Record<string, string> = {
   input_gate: 'a',
   tool_skip: 'f',
@@ -97,33 +63,53 @@ function arg(name: string): string | undefined {
 const sites = (arg('sites') ?? SUPPORTED_SITES.join(','))
   .split(',')
   .filter(Boolean);
-const unsupported = sites.filter((site) => !SUPPORTED_SITES.includes(site));
+const unsupported = sites.filter(
+  (site) => !(SUPPORTED_SITES as readonly string[]).includes(site),
+);
 if (unsupported.length) {
   console.error(`Vị trí chưa làm: ${unsupported.join(', ')}`);
   process.exit(1);
 }
 const onlyStt = arg('stt')?.split(',').map(Number);
 const gapMs = Number(arg('gap-ms') ?? 0);
-interface DemoCase {
-  stt: number;
-  group: string;
-  mustPass: boolean;
-  mustKeepSelector: boolean;
+const dryRun = process.argv.includes('--dry-run');
+const outDir = arg('out-dir');
+const runNo = Number(arg('run') ?? 1);
+if (!Number.isInteger(gapMs) || gapMs < 0) {
+  console.error('--gap-ms phải là số nguyên ≥ 0');
+  process.exit(1);
 }
-// An STT in several groups (f and b share 14, 16, 22, 23, 75) runs once.
-const byCase = new Map<number, DemoCase>();
-for (const group of GROUPS.filter((item) => sites.includes(item.site)))
-  for (const stt of group.stts.filter((n) => !onlyStt || onlyStt.includes(n))) {
-    const seen = byCase.get(stt);
-    byCase.set(stt, {
-      stt,
-      group: seen ? `${seen.group}+${group.name}` : group.name,
-      mustPass: (seen?.mustPass ?? false) || group.mustPass,
-      mustKeepSelector:
-        (seen?.mustKeepSelector ?? false) || group.mustKeepSelector,
-    });
-  }
-const cases = [...byCase.values()];
+if (!Number.isInteger(runNo) || runNo < 1) {
+  console.error('--run phải là số nguyên ≥ 1');
+  process.exit(1);
+}
+const cases = buildCases(sites, onlyStt);
+const stamp = new Date().toISOString().replace(/[:.]/gu, '-');
+const rowsFile = outDir && path.join(outDir, `run-${runNo}.jsonl`);
+const reportFile = outDir
+  ? path.join(outDir, `run-${runNo}.md`)
+  : `evals/runs/demo-${stamp}.md`;
+// Resume: rows already on disk are kept; the file is rewritten without any
+// truncated line before new rows are appended.
+const doneRows: StoredRow[] = rowsFile
+  ? parseRows(await readFile(rowsFile, 'utf8').catch(() => ''))
+  : [];
+const done = new Set(doneRows.map((row) => row.stt));
+const pending = cases.filter((item) => !done.has(item.stt));
+
+if (dryRun) {
+  console.log(
+    `[dry-run] vị trí ${sites.join(',')} · lượt ${runNo} · gap ${gapMs} ms`,
+  );
+  for (const item of cases)
+    console.log(
+      `  STT ${item.stt} · ${item.group}${done.has(item.stt) ? ' · đã có, bỏ qua' : ''}`,
+    );
+  console.log(
+    `  ${cases.length} câu, còn chạy ${pending.length} → ${reportFile}`,
+  );
+  process.exit(0);
+}
 
 const config = readChatConfig();
 const calls = { selector: 0, agent: 0 };
@@ -212,10 +198,18 @@ async function runOnce(chat: ChatService, message: string) {
 }
 
 const byStt = questionsByStt(await readFile(CSV, 'utf8'));
-const rows: DemoRow[] = [];
-for (const item of cases) {
-  const question = byStt.get(item.stt);
-  if (!question) throw new Error(`Không có STT ${item.stt} trong CSV`);
+const questionOf = (stt: number) => {
+  const question = byStt.get(stt);
+  if (!question) throw new Error(`Không có STT ${stt} trong CSV`);
+  return question;
+};
+if (rowsFile) {
+  await mkdir(path.dirname(rowsFile), { recursive: true });
+  await writeFile(rowsFile, doneRows.map(rowLine).join(''));
+}
+const newRows: StoredRow[] = [];
+for (const [index, item] of pending.entries()) {
+  const question = questionOf(item.stt);
   const off = await runOnce(offService, question);
   const before = sink.records.length;
   const on = await runOnce(onService, question);
@@ -225,9 +219,8 @@ for (const item of cases) {
   const preRoute = records.filter((r) => r.site !== 'claim_check');
   const claims = records.filter((r) => r.site === 'claim_check');
   const latency = preRoute.find((r) => r.latencyMs !== undefined)?.latencyMs;
-  rows.push({
+  const row: StoredRow = {
     ...item,
-    question,
     off,
     on,
     systemOne: records.length
@@ -255,13 +248,23 @@ for (const item of cases) {
     toolSkipped: acted('tool_skip'),
     claimsChecked: claims.length,
     claimsDropped: claims.filter((r) => r.action === 'acted').length,
-  });
-  console.error(`STT ${item.stt} xong`);
+  };
+  newRows.push(row);
+  if (rowsFile) await appendFile(rowsFile, rowLine(row));
+  console.error(`STT ${item.stt} xong (${index + 1}/${pending.length})`);
 }
 
-const header = `provider=${systemOneConfig.provider} model=${systemOneConfig.model ?? 'laya'} · vị trí: ${sites.join(',')} · ${new Date().toISOString()}`;
+// Case order, whatever order the rows were written in across resumes.
+const stored = [...doneRows, ...newRows];
+const rows: DemoRow[] = cases.flatMap((item) => {
+  const row = stored.find((candidate) => candidate.stt === item.stt);
+  return row ? [{ ...row, question: questionOf(item.stt) }] : [];
+});
+const resumed = doneRows.length
+  ? ` · tiếp tục: ${doneRows.length} câu có từ trước`
+  : '';
+const header = `provider=${systemOneConfig.provider} model=${systemOneConfig.model ?? 'laya'} · vị trí: ${sites.join(',')} · lượt ${runNo} · gap ${gapMs} ms · ${new Date().toISOString()}${resumed}`;
 console.log(`${header}\n\n${consoleReport(rows)}`);
-await mkdir('evals/runs', { recursive: true });
-const file = `evals/runs/demo-${new Date().toISOString().replace(/[:.]/gu, '-')}.md`;
-await writeFile(file, markdownReport(rows, header));
-console.log(`\nĐã lưu ${file}`);
+await mkdir(path.dirname(reportFile), { recursive: true });
+await writeFile(reportFile, markdownReport(rows, header));
+console.log(`\nĐã lưu ${reportFile}`);
