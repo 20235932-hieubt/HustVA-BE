@@ -1,3 +1,4 @@
+import { closeDemoRuntime } from './auth/runtime.js';
 import 'dotenv/config';
 import { app, embedding } from './app.js';
 import { crawlerShutdown } from './crawler/routes.js';
@@ -18,7 +19,9 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     toolsShutdown.abort();
     void embedding.stop().finally(() =>
       server.close(() => {
-        void closeChatRuntime().finally(() => process.exit(0));
+        void Promise.all([closeChatRuntime(), closeDemoRuntime()]).finally(() =>
+          process.exit(0),
+        );
       }),
     );
   });

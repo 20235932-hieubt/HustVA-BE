@@ -1,3 +1,4 @@
+import { createDemoAuthRouter } from './auth/routes.js';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -23,6 +24,7 @@ app.use(helmet());
 app.use(
   cors({
     origin: readHttpConfig().webOrigin,
+    credentials: true,
     exposedHeaders: ['X-Trace-Id'],
   }),
 );
@@ -33,6 +35,7 @@ app.use(
   createCrawlerRouter(crawlStore, embedding.publisher),
 );
 app.use('/api/v1/embedding', createEmbeddingRouter(embedding));
+app.use('/api/v1/auth/demo', createDemoAuthRouter());
 app.use('/api/v1/chat', createChatRouter());
 app.use('/api/v1/tools', createToolsRouter(undefined, getToolManager()));
 app.get('/api/v1/health', (_req, res) => {
