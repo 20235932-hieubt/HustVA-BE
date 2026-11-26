@@ -164,10 +164,11 @@ Context được giới hạn ở khóa `K20`–`K99`, năm học liên tiếp t
 
 Replay cùng UUID và nội dung gốc tái tạo mapping trong RAM để trả lại cùng câu trả lời, kể cả sau restart. Thay thông tin cá nhân nhưng giữ UUID trả `409 REQUEST_ID_REUSED`. Các request trước phiên bản fingerprint này cần UUID mới. Endpoint lịch sử/trạng thái giữ bản giả danh vì không lưu mapping lâu dài. Dữ liệu cũ đã lưu trước thay đổi này không được tự động xóa hoặc di chuyển.
 
-## HUST tools và tool management — giai đoạn 1
+## HUST tools và tool management
 
-Phạm vi hiện tại gồm **5 tool dữ liệu dùng chung** từ HUST Partner. Mỗi tool gọi
-một endpoint độc lập, không cần MSSV và không có workflow nhiều bước.
+Catalog gồm **5 tool dữ liệu dùng chung** và **2 tool điểm cá nhân tắt mặc định**
+từ HUST Partner. Các tool dùng chung không cần MSSV; tool điểm nhận MSSV 8 hoặc
+9 chữ số và chỉ dùng trong môi trường thử được kiểm soát khi chưa có xác thực sinh viên.
 
 | Tool                    | Endpoint                    | Tham số                    |
 | ----------------------- | --------------------------- | -------------------------- |
@@ -177,7 +178,7 @@ một endpoint độc lập, không cần MSSV và không có workflow nhiều b
 | `search_teachers`       | `/teacher/search`           | `{ "keyWord": "từ khóa" }` |
 | `search_companies`      | `/company/search`           | `{ "keyWord": "từ khóa" }` |
 
-Các tool hồ sơ sinh viên, điểm, thời khóa biểu, lịch thi, chương trình đào tạo,
+Các tool hồ sơ sinh viên, thời khóa biểu, lịch thi, chương trình đào tạo,
 đề tài, eHUST, workflow bảng điểm và cache học phần chưa nằm trong giai đoạn này;
 adapter và nhánh xử lý tương ứng đã được gỡ khỏi mã nguồn. Chat gọi 5 tool trên
 qua Gemini function calling: LLM chọn tool và tham số theo ngữ nghĩa câu hỏi,
@@ -192,7 +193,7 @@ Luồng tri thức sử dụng RAG trên kho tài liệu đã embed; `StubKnowle
 | Tìm giảng viên tên Nguyễn             | `search_teachers`       |
 | Tìm công ty FPT                       | `search_companies`      |
 
-[selector.ts](src/tools/selector.ts) đăng ký schema 5 tool và hai nhánh điều khiển
+[selector.ts](src/tools/selector.ts) mặc định đăng ký schema 5 tool dùng chung và hai nhánh điều khiển
 hỏi lại/chuyển luồng tri thức với Gemini. Mỗi lượt chọn tối đa một tool. Backend
 từ chối tên tool lạ, nhiều tool call cùng lúc, field lạ, từ khóa tự bịa hoặc token
 không thuộc lượt hiện tại. Model chọn hỏi lại nếu thiếu mã ngành/từ khóa.
@@ -204,7 +205,8 @@ Chat và management dùng chung manager từ [runtime.ts](src/tools/runtime.ts).
 Tắt tool qua PATCH hoặc trang `/tools` có hiệu lực với lượt chat tiếp theo.
 Response tra cứu có `retrievalMode: "hust_api"`, không mang cảnh báo retrieval stub.
 Kết quả API không gửi sang Gemini; câu hỏi hiện tại được gửi sau bước giả danh. Lịch sử lưu phần
-kết quả dùng chung đã chọn trường để replay cùng requestId không gọi lại API.
+kết quả dùng chung đã chọn trường để replay cùng requestId không gọi lại API. Kết quả điểm
+chỉ trả trực tiếp, không lưu để replay (xem phần tra cứu điểm bên dưới).
 Lượt tool bị loại khỏi context đưa cho model. Không tạo citation URL khi API không
 cung cấp nguồn công khai phù hợp.
 
@@ -220,12 +222,12 @@ kết quả đầu và số lượng trong phản hồi API; không khẳng đ�
 cầu `Authorization: Bearer <TOOL_MANAGEMENT_TOKEN>`, kể cả GET. Thiếu token hoặc
 token ngắn trả 503; token sai trả 401. Biến eHUST/cache cũ không còn được module đọc.
 
-| Method | Endpoint                    | Chức năng                                          |
-| ------ | --------------------------- | -------------------------------------------------- |
-| GET    | `/api/v1/tools`             | Danh sách 5 tool, JSON Schema, settings và metrics |
-| GET    | `/api/v1/tools/:id`         | Chi tiết tool                                      |
-| PATCH  | `/api/v1/tools/:id`         | Cập nhật bật/tắt, timeout và retry                 |
-| POST   | `/api/v1/tools/:id/execute` | Thực thi với body `{ "arguments": { ... } }`       |
+| Method | Endpoint                    | Chức năng                                        |
+| ------ | --------------------------- | ------------------------------------------------ |
+| GET    | `/api/v1/tools`             | Danh sách tool, JSON Schema, settings và metrics |
+| GET    | `/api/v1/tools/:id`         | Chi tiết tool                                    |
+| PATCH  | `/api/v1/tools/:id`         | Cập nhật bật/tắt, timeout và retry               |
+| POST   | `/api/v1/tools/:id/execute` | Thực thi với body `{ "arguments": { ... } }`     |
 
 Request ghi cần `Content-Type: application/json`; Origin trình duyệt phải là
 `WEB_ORIGIN` hoặc `API_ORIGIN`. Frontend có trang `/tools` dùng cùng
@@ -257,9 +259,68 @@ Cấu hình file hiện phục vụ một tiến trình backend.
 
 Tool đã gỡ không xuất hiện trong registry, không gọi được qua execute và không
 thể bật lại qua PATCH. Settings cũ của chúng bị bỏ qua khi load. Backend khác có
-thể gọi `ToolManager.execute(id, args, signal?)` cho 5 tool dùng chung này.
-Chưa có cơ chế xác thực sinh viên hoặc allowlist MSSV vì phạm vi hiện tại không
-đọc dữ liệu sinh viên.
+thể gọi `ToolManager.execute(id, args, signal?)`. Chưa có xác thực sinh viên,
+liên kết tài khoản-MSSV hoặc allowlist MSSV. Management token xác thực người vận hành,
+không xác minh chủ sở hữu MSSV. Chỉ dùng dữ liệu cá nhân của MSSV được ban tổ chức chỉ định.
+
+### Tool tra cứu điểm học tập
+
+Hai tool ánh xạ trực tiếp tới API Partner, không dùng eHUST transcript:
+
+| Tool                   | Endpoint           | Tham số                          |
+| ---------------------- | ------------------ | -------------------------------- |
+| `get_grades`           | `/grades`          | `studentId`, `semester` tùy chọn |
+| `get_grades_by_course` | `/gradebycourseid` | `studentId`, `courseId`          |
+
+Input dùng strict schema; `studentId` là chuỗi 8/9 chữ số, giữ số 0 ở đầu.
+`semester` có dạng `YYYY1`, `YYYY2`, `YYYY3`; bỏ field để lấy tất cả kỳ, không
+gửi chuỗi rỗng. `courseId` là mã học phần, chuẩn hóa chữ hoa. Không truyền
+`courseId` vào `get_grades` hay `semester` vào `get_grades_by_course`.
+
+Ví dụ chỉ dùng với mock (MSSV tổng hợp, không dùng gọi dịch vụ thật):
+
+```json
+{ "arguments": { "studentId": "20990001", "semester": "20251" } }
+```
+
+```json
+{ "arguments": { "studentId": "009990001", "courseId": "IT3090" } }
+```
+
+Gửi body trên tới `POST /api/v1/tools/<tool-id>/execute` với management bearer token.
+Trước đó bật tool bằng `PATCH /api/v1/tools/<tool-id>` với `{"enabled":true}`.
+HTTP client gửi POST, query string và body trống sang HUST đúng hợp đồng Partner.
+
+Để thử qua chat, đặt `CHAT_GRADES_ENABLED=true` và restart backend, đồng thời
+bật từng tool qua management. Không bật cờ này trên public deployment khi chưa
+có xác thực chủ sở hữu. Khi cờ tắt, model không được cung cấp tool điểm và backend
+chặn lời gọi điểm giả; các tool dùng chung hoạt động như trước.
+
+Trong chế độ thử, chatbot có thể nhận MSSV từ câu hiện tại hoặc context của chính
+phiên. Ví dụ khai báo “MSSV của tôi là …”, sau đó hỏi điểm mà không nhập lại MSSV.
+Self identity và đối tượng đang tra cứu được tách riêng; mâu thuẫn hoặc thiếu
+thông tin thì hỏi lại. Không suy dãy số từ tên/email/ngành. Binding tự khai lưu
+ở collection riêng `chat_student_subjects`, TTL tối đa 30 phút từ lúc xác định đối
+tượng và không vượt hạn conversation; không gia hạn chỉ vì đọc. Xóa conversation
+cũng xóa binding. Binding được kiểm tra quyền sở hữu phiên và lease; đây chưa
+phải xác minh quyền sở hữu MSSV. Model chỉ nhận tham chiếu được cấp cho lượt hiện tại,
+backend khôi phục MSSV cục bộ trước khi thực thi.
+
+Output management và chat chỉ giữ các trường điểm được phép. Chat hiển thị theo
+học kỳ và lớp, tối đa 30 hàng cùng giới hạn độ dài, nêu rõ khi chưa hiển thị hết.
+Điểm 0 khác với thiếu dữ liệu. Giữ mọi lần học, không tự tính GPA/CPA hoặc kết luận
+đỗ/trượt. HTTP 200 có error vẫn là lỗi; null/[] là chưa có dữ liệu, không suy đoán.
+
+Kết quả điểm không gửi sang Gemini, không lưu vào history/context model. History
+và request status chứa thông báo kết quả không được lưu với `replayable:false`.
+Gửi lại UUID cũ trả `409 REQUEST_NOT_REPLAYABLE`, không gọi HUST lần hai; đổi nội
+dung với cùng UUID vẫn trả `REQUEST_ID_REUSED`. Muốn tra cứu lại dùng UUID mới.
+Lỗi/clarification của tool điểm cũng không replay để tránh dùng lại ngữ cảnh cá nhân cũ.
+
+Tests, fixtures, mocks và runner chỉ giữ trên máy ngoài repo tại
+`../kiem-thu/be/grades/`, không commit/push. Build backend trước, rồi từ workspace
+chạy `node kiem-thu/be/grades/run-tests.mjs`. Không thêm script CI phụ thuộc test
+local. Để rollback: tắt hai tool qua management và đặt lại `CHAT_GRADES_ENABLED=false`.
 
 Các bài kiểm thử tự động và script kiểm thử API thật đã được chuyển sang
 `../kiem-thu/be`, giữ nguyên nội dung để tham khảo hoặc khôi phục khi cần.
