@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { gradesInputSchema, gradesByCourseInputSchema } from './grades.js';
 import { examsInputSchema } from './exams.js';
+import { teacherTopicsInput, companyTopicsInput } from './research-topics.js';
 
 const code = z
   .string()
@@ -43,6 +44,29 @@ function partner(
 
 // Grade tools are explicitly enabled by management; public chat has a separate gate.
 export const toolCatalog: readonly ToolDefinition[] = [
+  ...[
+    {
+      id: 'get_teacher_research_topics',
+      endpoint: 'teacher/research-topic',
+      schema: teacherTopicsInput,
+      description: 'Đề tài do giảng viên hướng dẫn; ID lấy từ tìm giảng viên.',
+    },
+    {
+      id: 'get_company_research_topics',
+      endpoint: 'company/research-topic',
+      schema: companyTopicsInput,
+      description:
+        'Đề tài thực tập/đồ án của công ty đối tác; ID lấy từ tìm công ty.',
+    },
+  ].map((tool): ToolDefinition => ({
+    ...tool,
+    source: 'partner',
+    defaultEnabled: false,
+    timeoutMs: 10000,
+    warnings: [
+      'Dữ liệu đề tài công bố theo nguồn; số sinh viên không đồng nghĩa số chỗ còn trống.',
+    ],
+  })),
   {
     id: 'get_exams',
     endpoint: 'exams',

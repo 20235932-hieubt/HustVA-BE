@@ -22,6 +22,7 @@ import {
 } from './grades.js';
 import { examSemesterSelection } from './exam-semester.js';
 import { logger } from '../observability/logger.js';
+import { isResearchTool } from './research-topics.js';
 import {
   resolveStudentSubject,
   type SubjectReferences,
@@ -137,6 +138,7 @@ export function buildRoutingTools(gradesEnabled = false, examsEnabled = false) {
   return [
     ...toolCatalog
       .filter((definition) => !definition.internal)
+      .filter((definition) => !isResearchTool(definition.id))
       // Enabled for chat only when routing, privacy and formatting are complete.
       .filter((definition) => examsEnabled || definition.id !== 'get_exams')
       .filter((definition) => gradesEnabled || !isGradeTool(definition.id))
@@ -239,6 +241,7 @@ export function createToolSelector(
       }
       const definition = findTool(call.name);
       if (!definition || definition.internal) throw invalid();
+      if (isResearchTool(call.name)) throw invalid();
 
       if (call.name === 'get_exams') {
         if (!examsEnabled) throw invalid();
