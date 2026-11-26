@@ -6,7 +6,7 @@ export function isGradeLookupRequest(message: string): boolean {
   const value = fold(message);
   return (
     /(?:diem|bang diem)/u.test(value) &&
-    /(?:xem|tra cuu|kiem tra|cho|lay|mon|hoc ky|ky nay|ky truoc|cua)/u.test(
+    /(?:xem|tim|tra cuu|kiem tra|cho|lay|mon|hoc ky|ky nay|ky truoc|cua|sinh vien|mssv|ma so sinh vien)/u.test(
       value,
     ) &&
     !/(?:diem chuan|cach tinh|quy dinh|thang diem|dieu kien)/u.test(value)
