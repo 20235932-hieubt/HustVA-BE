@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createMongoConnection } from '../db/client.js';
 import { readMongoConfig } from '../db/config.js';
 import { ChatError } from '../chat/contracts.js';
+import { logger } from '../observability/logger.js';
 import { readDemoConfig } from './demo-config.js';
 import { loadDemoAccounts } from './demo-accounts.js';
 import {
@@ -13,12 +14,16 @@ import {
 let pending: Promise<DemoAuthService | undefined> | undefined;
 let connection: ReturnType<typeof createMongoConnection> | undefined;
 export function getDemoAuth(): Promise<DemoAuthService | undefined> {
+  let stage = 'DEMO_CONFIG';
   pending ??= (async () => {
     const config = readDemoConfig();
     if (!config.enabled) return undefined;
+    stage = 'DEMO_ACCOUNTS';
     const { accounts, version } = await loadDemoAccounts(config.accountsFile);
+    stage = 'DEMO_MONGO_CONNECTION';
     connection = createMongoConnection(readMongoConfig());
     await connection.client.connect();
+    stage = 'DEMO_SESSION_INDEX';
     const store = new MongoDemoSessionStore(connection.db);
     await store.init();
     return new DemoAuthService(
@@ -27,7 +32,14 @@ export function getDemoAuth(): Promise<DemoAuthService | undefined> {
       store,
       config.ttlMs,
     );
-  })().catch(async () => {
+  })().catch(async (error: unknown) => {
+    const code = (error as { code?: unknown } | null)?.code;
+    logger.error('demo.auth.initialization_failed', {
+      errorCode: `${stage}_FAILED`,
+      ...(typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,40}$/u.test(code)
+        ? { reasonCode: code }
+        : {}),
+    });
     await connection?.client.close().catch(() => undefined);
     connection = undefined;
     pending = undefined;
