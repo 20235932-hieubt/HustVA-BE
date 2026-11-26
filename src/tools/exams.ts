@@ -111,6 +111,7 @@ const escape = (value: unknown) =>
 export function renderExams(
   data: unknown,
   semester: string,
+  options: { upcoming?: boolean; now?: number } = {},
 ): string | undefined {
   let rows: ExamRow[] | null;
   try {
@@ -119,6 +120,14 @@ export function renderExams(
     return;
   }
   if (!rows?.length) return;
+  const sourceCount = rows.length;
+  const now = options.now ?? Date.now();
+  const unknownTimes = rows.filter((row) => row.examDate == null).length;
+  if (options.upcoming) {
+    rows = rows.filter((row) => row.examDate == null || row.examDate >= now);
+    if (!rows.length)
+      return `Trong ${sourceCount} buổi HUST trả về cho **học kỳ ${semester}**, chưa thấy buổi thi nào bắt đầu từ thời điểm hiện tại.\n\nKết quả chỉ trong học kỳ này và dữ liệu API đang có, không khẳng định bạn không còn kỳ thi khác. Bạn kiểm tra thêm thông báo trên cổng sinh viên nhé.`;
+  }
   const sorted = [...rows].sort((a, b) => {
     if (a.examDate != null && b.examDate != null && a.examDate !== b.examDate)
       return a.examDate - b.examDate;
@@ -131,8 +140,12 @@ export function renderExams(
   });
   const lines = [
     `### Lịch thi học kỳ ${semester}`,
-    `HUST trả về **${rows.length} buổi thi**. Giờ hiển thị theo Việt Nam (Asia/Ho_Chi_Minh).`,
-    'Buổi có timestamp được xếp theo thời gian; buổi chỉ có chuỗi ngày nguồn được xếp sau.',
+    options.upcoming
+      ? `Có **${rows.length - unknownTimes} buổi** bắt đầu từ hiện tại trong dữ liệu học kỳ này.${unknownTimes ? ` Có ${unknownTimes} buổi chưa xác định được thời gian, cần kiểm tra thông tin nguồn.` : ''} Giờ Việt Nam (Asia/Ho_Chi_Minh).`
+      : `HUST trả về **${rows.length} buổi thi**. Giờ hiển thị theo Việt Nam (Asia/Ho_Chi_Minh).`,
+    options.upcoming
+      ? 'Chỉ tra trong học kỳ hiện tại; các buổi chưa có timestamp được xếp sau và chưa thể kết luận là sắp thi.'
+      : 'Buổi có timestamp được xếp theo thời gian; buổi chỉ có chuỗi ngày nguồn được xếp sau.',
     '| Học phần | Ngày | Giờ | Địa điểm | Nhóm / Ca | Loại thi / Ghi chú |',
     '| --- | --- | --- | --- | --- | --- |',
   ];

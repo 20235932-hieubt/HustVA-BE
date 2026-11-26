@@ -31,6 +31,7 @@ export interface ToolPlan {
   examSemester?: ExamSemesterSelection;
   /** Resolved locally, never forwarded to upstream or model. */
   studentId?: string;
+  upcomingExams?: boolean;
 }
 
 export const profileFields = [
@@ -370,7 +371,9 @@ export async function runChatTool(
   }
   const answer =
     plan.id === 'get_exams'
-      ? renderExams(result.data, String(plan.arguments.semester))
+      ? renderExams(result.data, String(plan.arguments.semester), {
+          upcoming: plan.upcomingExams,
+        })
       : plan.id === 'get_student_info'
         ? await profileAnswer(result.data, plan.fields, tools, signal, access)
         : render(plan, result.data);

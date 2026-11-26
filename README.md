@@ -470,6 +470,13 @@ giá trị mẫu, không ghi đè `.env` hiện có khi cập nhật cấu hình
 - “Xem lịch thi của tôi”: hỏi kỳ, không bắt nhập lại MSSV. Câu tiếp chỉ có mã
   kỳ có thể tiếp tục yêu cầu; “kỳ đó” chỉ dùng metadata backend còn hạn.
 - “Kỳ trước/kỳ tới” chưa có mã: hỏi mã cụ thể, không suy ra quy tắc kỳ hè.
+- “Sắp tới tôi có thi gì không”: model chọn `semester="upcoming"`; backend lấy
+  kỳ hiện tại từ HUST và lọc những buổi bắt đầu từ thời điểm xử lý. Không dùng
+  kỳ đã nhắc trước làm mặc định cho câu này. Phạm vi chỉ trong học kỳ hiện tại,
+  chưa gộp mọi học kỳ tương lai. Buổi thiếu timestamp vẫn hiển thị kèm cảnh báo
+  chưa xác định thời gian; không tự coi là đã qua hoặc sắp thi. Khi chỉ có buổi
+  đã qua, bot báo chưa thấy buổi từ hiện tại trong dữ liệu kỳ đó, không kết luận
+  sinh viên không còn kỳ thi nào.
 
 Lịch thi trả bảng Markdown, giờ `Asia/Ho_Chi_Minh`, giữ các ca thi riêng biệt.
 Tối đa 30 buổi/khoảng 9.000 ký tự; báo rõ khi chưa hiển thị hết. Timestamp dùng

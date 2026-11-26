@@ -67,9 +67,9 @@ const examsSelection = z.strictObject({
   semester: z
     .string()
     .trim()
-    .regex(/^(?:[0-9]{4}[123]|current|context)$/u)
+    .regex(/^(?:[0-9]{4}[123]|current|context|upcoming)$/u)
     .describe(
-      'Mã kỳ có trong câu hỏi, hoặc current cho kỳ hiện tại, context cho kỳ đã xác định trong tham chiếu backend.',
+      'Mã kỳ trong câu; current cho kỳ hiện tại; context cho kỳ trong context; upcoming khi hỏi sắp tới có thi gì (tra kỳ hiện tại và lọc từ hiện tại).',
     ),
 });
 // Accept the earlier object representation only at the local validation boundary.
@@ -122,6 +122,7 @@ subject=self khi hỏi điểm của tôi/em/mình; active khi tiếp tục đ�
 Nếu có nhiều MSSV hoặc context conflict thì hỏi lại. Nếu chưa có self/active/ref phù hợp thì hỏi MSSV; không đoán MSSV từ tên/email/ngành. Không gửi MSSV thật. Mã học phần và học kỳ phải xuất hiện trong câu hiện tại; nếu hỏi kỳ này/kỳ trước hoặc tên môn chưa có mã thì hỏi mã rõ ràng. Bỏ semester khi muốn tất cả kỳ. Chỉ gọi một tool.`;
 
 const examsPrompt = `
+“Sắp tới tôi có thi gì không”, “có môn nào sắp thi”, “sắp thi môn gì” dùng get_exams với subject=self, semester="upcoming". Tra các buổi từ hiện tại trong kỳ hiện tại, không lấy kỳ đã hỏi trước làm mặc định. Không tự tạo mã kỳ, không dùng object/ngày tự suy ra/semester="next". Backend lấy kỳ từ API và lọc thời gian, model không biết lịch cá nhân.
 Tra lịch thi cá nhân dùng get_exams, kể cả câu viết tắt/không dấu hoặc hỏi khi nào thi. Quy chế, điều kiện dự thi, phúc khảo dùng route_knowledge.
 subject=self khi hỏi của tôi/em/mình hoặc hỏi lịch của chính người đang đăng nhập; active khi tiếp nối đối tượng; explicit khi có token MSSV trong câu, giữ token đó vào studentIdRef. Nếu backend có selfRef thì không hỏi lại MSSV. Không đoán MSSV hoặc dùng tên/email làm định danh.
 semester là chuỗi: mã kỳ đúng mã có trong câu (ví dụ "20252"), "current" khi người dùng nói kỳ này/hiện tại, hoặc "context" chỉ khi người dùng tham chiếu kỳ đã hỏi và backend có examSemester. Không dùng object kind/code cho semester. Thiếu kỳ hoặc kỳ trước/kỳ tới không có mã thì ask_clarification với tool=get_exams. Không mặc định lấy kỳ hiện tại khi chưa được yêu cầu.
@@ -270,7 +271,7 @@ export function createToolSelector(
         const semester =
           typeof rawSemester !== 'string'
             ? rawSemester
-            : rawSemester === 'current'
+            : rawSemester === 'current' || rawSemester === 'upcoming'
               ? { kind: 'current' as const }
               : rawSemester === 'context'
                 ? {
@@ -298,6 +299,7 @@ export function createToolSelector(
           arguments: {},
           studentId,
           examSemester: semester,
+          upcomingExams: rawSemester === 'upcoming',
         };
       }
 

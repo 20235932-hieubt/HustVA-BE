@@ -6,7 +6,7 @@ import { studentIdSchema } from './grades.js';
 export function isExamLookupRequest(message: string): boolean {
   const value = fold(message);
   return (
-    /lich thi|(?:khi nao|bao gio|may gio|phong nao).{0,25}\bthi\b/u.test(
+    /lich thi|sap.{0,35}\bthi\b|(?:khi nao|bao gio|may gio|phong nao).{0,25}\bthi\b/u.test(
       value,
     ) &&
     !/quy dinh|quy che|thu tuc|dieu kien|cach xem|huong dan|phuc khao/u.test(
