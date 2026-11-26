@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { createMongoConnection } from '../db/client.js';
 import { readMongoConfig } from '../db/config.js';
 import { ChatError } from '../chat/contracts.js';
@@ -20,7 +21,12 @@ export function getDemoAuth(): Promise<DemoAuthService | undefined> {
     await connection.client.connect();
     const store = new MongoDemoSessionStore(connection.db);
     await store.init();
-    return new DemoAuthService(accounts, version, store, config.ttlMs);
+    return new DemoAuthService(
+      accounts,
+      `${version}:${randomUUID()}`,
+      store,
+      config.ttlMs,
+    );
   })().catch(async () => {
     await connection?.client.close().catch(() => undefined);
     connection = undefined;

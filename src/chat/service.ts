@@ -223,7 +223,7 @@ export class ChatService {
     )
       screen.result = reply(
         'requires_authentication',
-        'Vui l?ng ??ng nh?p t?i kho?n demo tr?n trang chat tr?c ti?p ?? tra c?u ?i?m c?a b?n.',
+        'Vui lòng đăng nhập tài khoản demo trên trang chat trực tiếp để tra cứu điểm của bạn.',
         'DEMO_AUTH_REQUIRED',
       );
     if (
@@ -232,7 +232,7 @@ export class ChatService {
     )
       screen.result = reply(
         'requires_authentication',
-        'Vui l?ng ??ng nh?p t?i kho?n demo tr?n trang chat tr?c ti?p ?? tra c?u ?i?m c?a b?n.',
+        'Vui lòng đăng nhập tài khoản demo trên trang chat trực tiếp để tra cứu điểm của bạn.',
         'DEMO_AUTH_REQUIRED',
       );
     // Preserve meaning for LLM routing while masking detected identifiers locally.
@@ -379,19 +379,30 @@ export class ChatService {
           reasonCode: screen.result.reasonCode,
         });
       // A declaration stores context without sending it through the knowledge graph.
-      const subjectResult = prepared?.references.conflict
+      const forbiddenSubject =
+        principal &&
+        prepared?.references.explicitRefs.some(
+          (ref) => privacy.restore(ref) !== principal.studentId,
+        );
+      const subjectResult = forbiddenSubject
         ? reply(
-            'needs_clarification',
-            'Có nhiều MSSV hoặc thông tin đối tượng chưa khớp. Bạn xác định lại sinh viên cần tra cứu giúp mình nhé.',
-            'HUST_SUBJECT_AMBIGUOUS',
+            'blocked',
+            'Bạn chỉ được tra cứu điểm của tài khoản đang đăng nhập.',
+            'HUST_STUDENT_FORBIDDEN',
           )
-        : prepared?.next && !isGradeLookupRequest(input.message)
+        : prepared?.references.conflict
           ? reply(
-              'answered',
-              'Mình đã ghi nhận đối tượng tra cứu trong phiên này. Bạn muốn xem điểm học kỳ hay học phần nào?',
-              'HUST_SUBJECT_RECORDED',
+              'needs_clarification',
+              'Có nhiều MSSV hoặc thông tin đối tượng chưa khớp. Bạn xác định lại sinh viên cần tra cứu giúp mình nhé.',
+              'HUST_SUBJECT_AMBIGUOUS',
             )
-          : undefined;
+          : prepared?.next && !isGradeLookupRequest(input.message)
+            ? reply(
+                'answered',
+                'Mình đã ghi nhận đối tượng tra cứu trong phiên này. Bạn muốn xem điểm học kỳ hay học phần nào?',
+                'HUST_SUBJECT_RECORDED',
+              )
+            : undefined;
       const toolPlan =
         !subjectResult && routingMessage !== undefined && this.selector
           ? await abortable(
