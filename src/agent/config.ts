@@ -9,10 +9,18 @@ export interface ChatConfig {
   maxModelCalls: number;
   maxTurnTokens: number;
   maxOutputTokens: number;
+  gradesEnabled?: boolean;
 }
 export function readChatConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): ChatConfig {
+  const gradesFlag = env.CHAT_GRADES_ENABLED?.trim() || 'false';
+  if (!['true', 'false'].includes(gradesFlag))
+    throw new ChatError(
+      503,
+      'CHAT_CONFIG_INVALID',
+      'Cấu hình CHAT_GRADES_ENABLED không hợp lệ.',
+    );
   function number(key: string, fallback: number, maximum: number) {
     const raw = env[key]?.trim();
     const value = raw ? Number(raw) : fallback;
@@ -33,5 +41,6 @@ export function readChatConfig(
     maxModelCalls: number('CHAT_MAX_MODEL_CALLS', 4, 6),
     maxTurnTokens: number('CHAT_MAX_TURN_TOKENS', 24_000, 50_000),
     maxOutputTokens: number('CHAT_MAX_OUTPUT_TOKENS', 1200, 2000),
+    gradesEnabled: gradesFlag === 'true',
   };
 }
