@@ -1,5 +1,5 @@
 // Run chat turns with System One OFF, then ON, and compare.
-//   pnpm tsx evals/demo-system-one.ts [--sites=a,f] [--stt=114,2]
+//   pnpm tsx evals/demo-system-one.ts [--sites=a,f,b] [--stt=114,2]
 //     [--gap-ms=8000]
 // Uses the real ChatService with an in-memory store (no HTTP, no Mongo).
 // Needs GEMINI_API_KEY, embedding service 8001 + local vectors and the
@@ -19,6 +19,7 @@ import { ChatService } from '../src/chat/service.js';
 import { CrawlStore } from '../src/crawler/store.js';
 import { EmbeddingService } from '../src/embedding/index.js';
 import { RagKnowledge } from '../src/knowledge/rag.js';
+import { createClaimChecker } from '../src/system-one/claim-check.js';
 import { readSystemOneConfig } from '../src/system-one/config.js';
 import { memorySink } from '../src/system-one/sink.js';
 import { createSystemOneTurn } from '../src/system-one/turn.js';
@@ -40,7 +41,7 @@ import { questionsByStt } from './probe/csv.js';
 process.env.LOG_LEVEL = process.env.DEMO_LOG_LEVEL ?? 'silent';
 
 const CSV = 'evals/cau-hoi-kiem-thu.csv';
-const SUPPORTED_SITES = ['a', 'f'];
+const SUPPORTED_SITES = ['a', 'f', 'b'];
 // demo-plan mục 4. mustPass: the gate must let the turn through;
 // mustKeepSelector: a tool question, site f must not skip the selector.
 const GROUPS = [
@@ -73,8 +74,19 @@ const GROUPS = [
     mustKeepSelector: true,
     stts: [34, 68, 132, 58],
   },
+  {
+    site: 'b',
+    name: 'b-có số liệu',
+    mustPass: true,
+    mustKeepSelector: false,
+    stts: [14, 16, 20, 22, 23, 75],
+  },
 ];
-const SITE_TAG: Record<string, string> = { input_gate: 'a', tool_skip: 'f' };
+const SITE_TAG: Record<string, string> = {
+  input_gate: 'a',
+  tool_skip: 'f',
+  claim_check: 'b',
+};
 
 function arg(name: string): string | undefined {
   return process.argv
@@ -92,17 +104,26 @@ if (unsupported.length) {
 }
 const onlyStt = arg('stt')?.split(',').map(Number);
 const gapMs = Number(arg('gap-ms') ?? 0);
-const cases = GROUPS.filter((group) => sites.includes(group.site)).flatMap(
-  (group) =>
-    group.stts
-      .filter((stt) => !onlyStt || onlyStt.includes(stt))
-      .map((stt) => ({
-        stt,
-        group: group.name,
-        mustPass: group.mustPass,
-        mustKeepSelector: group.mustKeepSelector,
-      })),
-);
+interface DemoCase {
+  stt: number;
+  group: string;
+  mustPass: boolean;
+  mustKeepSelector: boolean;
+}
+// An STT in several groups (f and b share 14, 16, 22, 23, 75) runs once.
+const byCase = new Map<number, DemoCase>();
+for (const group of GROUPS.filter((item) => sites.includes(item.site)))
+  for (const stt of group.stts.filter((n) => !onlyStt || onlyStt.includes(n))) {
+    const seen = byCase.get(stt);
+    byCase.set(stt, {
+      stt,
+      group: seen ? `${seen.group}+${group.name}` : group.name,
+      mustPass: (seen?.mustPass ?? false) || group.mustPass,
+      mustKeepSelector:
+        (seen?.mustKeepSelector ?? false) || group.mustKeepSelector,
+    });
+  }
+const cases = [...byCase.values()];
 
 const config = readChatConfig();
 const calls = { selector: 0, agent: 0 };
@@ -115,19 +136,18 @@ const counted = (model: AgentModel, key: keyof typeof calls): AgentModel => ({
 const knowledge = new RagKnowledge(
   new EmbeddingService(new CrawlStore(), undefined, () => undefined).pipeline,
 );
-const agent = createChatAgent(
-  counted(createGeminiModel(config), 'agent'),
-  knowledge,
-  config,
-);
+const agentModel = counted(createGeminiModel(config), 'agent');
 const selector = createToolSelector(
   counted(createRoutingModel(config), 'selector'),
 );
 const tools = getToolManager();
-const service = (systemOne?: ReturnType<typeof createSystemOneTurn>) =>
+const service = (
+  systemOne?: ReturnType<typeof createSystemOneTurn>,
+  claimChecker?: ReturnType<typeof createClaimChecker>,
+) =>
   new ChatService(
     new MemoryConversationStore(),
-    agent,
+    createChatAgent(agentModel, knowledge, config, claimChecker),
     config.timeoutMs,
     tools,
     selector,
@@ -145,20 +165,23 @@ const systemOneConfig = readSystemOneConfig(
     SYSTEM_ONE_INPUT_GATE: String(sites.includes('a')),
     SYSTEM_ONE_TOOL_SKIP: String(sites.includes('f')),
     SYSTEM_ONE_CLARIFY: 'false',
-    SYSTEM_ONE_CLAIM_CHECK: 'false',
+    SYSTEM_ONE_CLAIM_CHECK: String(sites.includes('b')),
     SYSTEM_ONE_UNIT_HINT: 'false',
     SYSTEM_ONE_RELEVANCE: 'false',
   },
   { warn: (event, fields) => console.error(event, JSON.stringify(fields)) },
 );
-const sink = memorySink();
-const onTurn = createSystemOneTurn(systemOneConfig, { sink });
-if (!onTurn) {
+// An invalid SYSTEM_ONE_* config reads as mode off (fail-open).
+if (systemOneConfig.mode === 'off') {
   console.error('Cấu hình SYSTEM_ONE_* không hợp lệ (xem log ở trên).');
   process.exit(1);
 }
+const sink = memorySink();
 const offService = service();
-const onService = service(onTurn);
+const onService = service(
+  createSystemOneTurn(systemOneConfig, { sink }),
+  createClaimChecker(systemOneConfig, { sink }),
+);
 
 async function runOnce(chat: ChatService, message: string) {
   if (gapMs > 0) await sleep(gapMs);
@@ -199,7 +222,9 @@ for (const item of cases) {
   const records = sink.records.slice(before);
   const acted = (site: string) =>
     records.some((r) => r.site === site && r.action === 'acted');
-  const latency = records.find((r) => r.latencyMs !== undefined)?.latencyMs;
+  const preRoute = records.filter((r) => r.site !== 'claim_check');
+  const claims = records.filter((r) => r.site === 'claim_check');
+  const latency = preRoute.find((r) => r.latencyMs !== undefined)?.latencyMs;
   rows.push({
     ...item,
     question,
@@ -207,15 +232,29 @@ for (const item of cases) {
     on,
     systemOne: records.length
       ? [
-          ...records.map(
+          ...preRoute.map(
             (r) =>
               `${SITE_TAG[r.site] ?? r.site}:${r.label ?? '—'} ${r.probability?.toFixed(2) ?? '—'} ${r.action}`,
           ),
           ...(latency === undefined ? [] : [`${Math.round(latency)} ms`]),
+          ...(claims.length
+            ? [
+                `b:${claims
+                  .map(
+                    (r) =>
+                      `${r.label === 'ho_tro' ? (r.probability?.toFixed(2) ?? '—') : r.label} ${r.action}`,
+                  )
+                  .join(', ')}`,
+              ]
+            : []),
         ].join(' · ')
-      : '— (checkInput đã xử lý)',
+      : sites.some((site) => site === 'a' || site === 'f')
+        ? '— (checkInput đã xử lý)'
+        : '— (agent chưa ra draft)',
     gateActed: acted('input_gate'),
     toolSkipped: acted('tool_skip'),
+    claimsChecked: claims.length,
+    claimsDropped: claims.filter((r) => r.action === 'acted').length,
   });
   console.error(`STT ${item.stt} xong`);
 }

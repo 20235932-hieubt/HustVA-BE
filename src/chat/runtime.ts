@@ -15,6 +15,7 @@ import { MongoStudentSubjectStore } from './student-subject-repository.js';
 import { MongoResearchLookupStore } from './research-target-repository.js';
 import { readSystemOneConfig } from '../system-one/config.js';
 import { createSystemOneTurn } from '../system-one/turn.js';
+import { createClaimChecker } from '../system-one/claim-check.js';
 
 export const chatShutdown = new AbortController();
 let pending: Promise<ChatService> | undefined;
@@ -33,7 +34,9 @@ export function getChatService(): Promise<ChatService> {
     try {
       const config = readChatConfig();
       // Fail-open: an invalid SYSTEM_ONE_* config turns System One off.
-      const systemOne = createSystemOneTurn(readSystemOneConfig());
+      const systemOneConfig = readSystemOneConfig();
+      const systemOne = createSystemOneTurn(systemOneConfig);
+      const claimChecker = createClaimChecker(systemOneConfig);
       connection = createMongoConnection(readMongoConfig());
       await connection.client.connect();
       const store = new MongoConversationStore(connection.db);
@@ -53,7 +56,12 @@ export function getChatService(): Promise<ChatService> {
       // For this baseline only sanitized completed history is persisted; scratchpad stays per-turn.
       return new ChatService(
         store,
-        createChatAgent(createGeminiModel(config), knowledge, config),
+        createChatAgent(
+          createGeminiModel(config),
+          knowledge,
+          config,
+          claimChecker,
+        ),
         config.timeoutMs,
         getToolManager(),
         createToolSelector(

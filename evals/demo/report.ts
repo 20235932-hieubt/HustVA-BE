@@ -21,6 +21,9 @@ export interface DemoRow {
   systemOne: string;
   gateActed: boolean;
   toolSkipped: boolean;
+  /** Site b: claims sent through the check, and claims it dropped. */
+  claimsChecked: number;
+  claimsDropped: number;
 }
 
 const gemini = (run: RunOutcome) => run.selectorCalls + run.agentCalls;
@@ -76,6 +79,8 @@ function summary(rows: DemoRow[]): string {
   const changed = rows.filter((row) => row.off.status !== row.on.status);
   const selectorOff = sum((row) => row.off.selectorCalls);
   const selectorOn = sum((row) => row.on.selectorCalls);
+  const answered = (pick: (row: DemoRow) => RunOutcome) =>
+    rows.filter((row) => pick(row).status === 'answered').length;
   return [
     `- Câu: ${rows.length}; cổng (a) hành động: ${rows.filter((row) => row.gateActed).length}; bỏ qua bộ chọn tool (f): ${list(rows.filter((row) => row.toolSkipped))}`,
     `- Gemini OFF: ${sum((row) => gemini(row.off))} (chọn tool ${selectorOff}, agent ${sum((row) => row.off.agentCalls)})`,
@@ -86,6 +91,9 @@ function summary(rows: DemoRow[]): string {
     `- Đổi status: ${list(changed)}`,
     `- ⚠ câu phải đi tiếp bị cổng chặn: ${list(rows.filter(wronglyStopped))}`,
     `- ⚠ câu cần tool bị bỏ qua bộ chọn: ${list(rows.filter(wronglySkipped))}`,
+    `- Kiểm claim (b): đã kiểm ${sum((row) => row.claimsChecked)} claim, lược ${sum((row) => row.claimsDropped)}; câu có claim bị lược: ${list(rows.filter((row) => row.claimsDropped > 0))}`,
+    `- Hết claim → CLAIMS_UNSUPPORTED: ${list(rows.filter((row) => row.on.reasonCode === 'CLAIMS_UNSUPPORTED'))}`,
+    `- answered OFF/ON: ${answered((row) => row.off)} / ${answered((row) => row.on)}`,
   ].join('\n');
 }
 
