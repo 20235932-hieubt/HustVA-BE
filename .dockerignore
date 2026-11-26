@@ -1,0 +1,13 @@
+.git
+.husky
+.local
+.env
+.env.*
+!.env.example
+node_modules
+dist
+coverage
+services
+eval
+src/eval
+*.log

@@ -2,11 +2,51 @@
 
 Backend hỗ trợ crawl nội dung công khai HUST từ HTML/PDF, embed nội dung đã crawl và chatbot công tác sinh viên (RAG) sử dụng Gemini, LangGraph, MongoDB. Chatbot tra cứu trên các đoạn văn bản đã embed và trả lời kèm trích dẫn nguồn. Hệ thống cũng có 5 HUST Partner tool và API quản lý tool; LLM chọn chức năng, backend kiểm tra và thực thi.
 
-## Chạy local
+## Chạy bằng Docker
 
-Tại thư mục `be`, dùng Node.js 22 và pnpm 10.33.0:
+Hệ thống gồm hai service:
+
+| Service     | Vai trò                                                                           | Cổng   |
+| ----------- | --------------------------------------------------------------------------------- | ------ |
+| `api`       | Node.js: crawler, pipeline embedding, chatbot, HUST tools                         | `4000` |
+| `embedding` | Python: mô hình `dangvantuan/vietnamese-document-embedding`, trả vector 768 chiều | `8001` |
+
+Chunk, vector và hội thoại lưu trên MongoDB Atlas. Docker volume chỉ giữ file làm việc của crawler, trạng thái index, settings tool và mô hình đã tải. Cần Docker (Docker Desktop trên Windows) và khoảng 4 GB RAM trống cho mô hình.
+
+1. Tạo `.env` từ [.env.example](.env.example) và điền `MONGODB_URI`, `MONGODB_DB_NAME`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `EMBEDDING_STORE=atlas`, `EMBEDDING_DIMENSION=768`. Giữ `CHAT_MAX_TURN_TOKENS=24000`; đặt thấp hơn thì câu hỏi cần đọc nhiều tài liệu bị dừng với `MODEL_BUDGET`. Atlas cần cho phép IP của máy chạy API.
+2. Build và chạy:
+
+   ```powershell
+   docker compose -f docker-compose.app.yml up -d --build
+   ```
+
+   Lần đầu service `embedding` tải mô hình (~1,2 GB) vào volume, mất vài phút. `api` chỉ khởi động khi `embedding` đã sẵn sàng. Compose tự đặt `HOST=0.0.0.0` và địa chỉ service embedding cho container.
+
+3. Kiểm tra: `docker compose -f docker-compose.app.yml ps` và `GET http://localhost:4000/api/v1/embedding/status` (`store` là `atlas`, `chunks` là số đoạn trên Atlas).
+
+Lần đầu dùng một Atlas mới, tạo collections và vector index một lần:
 
 ```powershell
+docker compose -f docker-compose.app.yml exec api node dist/db/cli.js setup
+docker compose -f docker-compose.app.yml exec api node dist/db/cli.js check
+```
+
+Lệnh thường dùng:
+
+```powershell
+docker compose -f docker-compose.app.yml logs -f api   # xem log
+docker compose -f docker-compose.app.yml restart api   # nạp lại .env
+docker compose -f docker-compose.app.yml down          # tắt, giữ volume
+```
+
+Hai cổng chỉ mở trên `127.0.0.1` của máy chạy. Khi deploy, đặt reverse proxy (HTTPS) trỏ vào `127.0.0.1:4000` và cấu hình `API_ORIGIN`, `WEB_ORIGIN` như mục bên dưới. Không chạy bản Docker cùng lúc với `pnpm.cmd dev` trên cùng một Atlas.
+
+## Chạy local
+
+Chạy riêng service embedding bằng Docker, API bằng Node.js 22 và pnpm 10.33.0:
+
+```powershell
+docker compose -f docker-compose.app.yml up -d embedding
 pnpm.cmd install --frozen-lockfile
 if (!(Test-Path .env)) { Copy-Item .env.example .env }
 pnpm.cmd dev
@@ -14,7 +54,7 @@ pnpm.cmd dev
 
 Nếu chưa có pnpm trên PATH, thay `pnpm.cmd` bằng `npm.cmd exec --yes --package=pnpm@10.33.0 -- pnpm`.
 
-API mặc định chạy tại `http://localhost:4000`, bind `127.0.0.1`. Kiểm tra bằng `GET /api/v1/health`. Tham khảo các biến cấu hình trong [.env.example](.env.example), restart server sau khi sửa `.env`.
+API mặc định chạy tại `http://localhost:4000`, bind `127.0.0.1`, gọi embedding ở `http://127.0.0.1:8001`. Kiểm tra bằng `GET /api/v1/health`. Tham khảo các biến cấu hình trong [.env.example](.env.example), restart server sau khi sửa `.env`.
 
 ## Cấu hình endpoint khi deploy
 
@@ -67,7 +107,7 @@ Nội dung và bản gốc lưu trong `.local/crawler`. Các file `exports/lates
 pnpm.cmd db:check
 ```
 
-Lệnh trên kiểm tra kết nối; khi có cấu hình embedding, lệnh còn kiểm tra vector index. `pnpm.cmd db:setup` chuẩn bị collections/index cho kho tri thức, chỉ tạo vector index khi đặt `EMBEDDING_DIMENSION`. Chatbot hiện tra cứu trên vector lưu local (`.local/embedding`), chưa cần vector index Atlas. Các lệnh này không tự import dữ liệu crawler.
+Lệnh trên kiểm tra kết nối; khi có cấu hình embedding, lệnh còn kiểm tra vector index. `pnpm.cmd db:setup` chuẩn bị collections/index cho kho tri thức, chỉ tạo vector index khi đặt `EMBEDDING_DIMENSION`. Với `EMBEDDING_STORE=atlas`, chatbot tra cứu bằng Atlas Vector Search nên cần vector index này. Các lệnh này không tự import dữ liệu crawler.
 
 Chat runtime tự chuẩn bị `chat_conversations` và `chat_requests` khi được dùng. Điền thêm `GEMINI_API_KEY` và `GEMINI_MODEL` được cấp quyền trong project cho câu cần gọi model. Thiếu cấu hình Gemini, câu chào vẫn hoạt động; câu cần model trả `503 GEMINI_NOT_CONFIGURED`.
 
@@ -107,7 +147,7 @@ Token phiên là quyền truy cập hội thoại demo local, chưa phải đăn
 
 ## Embedding
 
-Crawler lưu xong một tài liệu mới hoặc đã đổi nội dung thì phát event `document.saved`; tài liệu được chunk và embed ngay trong nền, không làm chậm hay hỏng lượt crawl. Code nằm ở `src/embedding/`, mô hình chạy ở service Python `services/embedding/` ([cách chạy](services/embedding/README.md)). Vector và trạng thái lưu local trong `.local/embedding`.
+Crawler lưu xong một tài liệu mới hoặc đã đổi nội dung thì phát event `document.saved`; tài liệu được chunk và embed ngay trong nền, không làm chậm hay hỏng lượt crawl. Code nằm ở `src/embedding/`, mô hình chạy ở service `embedding` (Docker, [app.py](services/embedding/app.py)). Vector lưu trên Atlas khi `EMBEDDING_STORE=atlas` (mặc định `local` lưu trong `.local/embedding`); trạng thái index lưu trong `EMBEDDING_DATA_DIR`.
 
 ```
 crawler saveDocument ─(saved)─► publisher ─► hàng đợi ─► đọc tài liệu → chunk → embed → lưu vector
@@ -118,7 +158,7 @@ crawler saveDocument ─(saved)─► publisher ─► hàng đợi ─► đọ
 - Không embed lại tài liệu không đổi (`versionId`). Event bị mất, service embedding đang tắt, tài liệu crawl từ trước, hay đổi mô hình/cách chunk đều được lượt reconcile bắt lại.
 - Trang chỉ dẫn tới PDF (`index_only`) được bỏ qua; nội dung nằm ở PDF đi kèm.
 
-Thứ tự chạy: bật service embedding, rồi `pnpm.cmd dev`. Không bật service thì crawler vẫn chạy bình thường, tài liệu chờ embed ở trạng thái `pending`.
+Thứ tự chạy: bật service `embedding`, rồi API (compose tự làm theo thứ tự này). Không bật service thì crawler vẫn chạy bình thường, tài liệu chờ embed ở trạng thái `pending`.
 
 | Endpoint                                       | Việc                                                                 |
 | ---------------------------------------------- | -------------------------------------------------------------------- |
@@ -139,18 +179,18 @@ Khi chuyển sang MongoDB/RabbitMQ/Qdrant chỉ cần thay phần cài đặt tr
 ```
 câu hỏi → guard → ReAct agent (Gemini) ⇄ search_knowledge / read_document_section → submit_answer → kiểm tra căn cứ → trả lời + nguồn
                                               │
-                                              └─ RagKnowledge: embed câu hỏi → cosine trên .local/embedding → lọc, bỏ trùng
+                                              └─ RagKnowledge: embed câu hỏi → Atlas Vector Search → lọc, bỏ trùng
 ```
 
 - **Retrieval** ([rag.ts](src/knowledge/rag.ts)): `search_knowledge` embed câu hỏi bằng cùng service Python, lấy các đoạn có điểm ≥ `RAG_MIN_SCORE` (mặc định 0.45), bỏ đoạn trùng nội dung (cùng PDF crawl ở hai nguồn), lọc theo khóa trong `context.cohort` (giữ cả quy định chung). `read_document_section` trả đoạn trước/sau của một evidence đã nhận trong lượt.
 - **Generation** ([policy.ts](src/guardrails/policy.ts) `validateDraft`): model chỉ nộp các claim kèm `evidenceIds`. Backend chỉ chấp nhận id do tool trả về trong chính lượt đó, tự ghép câu trả lời, đánh số `[1]`, `[2]` và thêm danh sách nguồn. Claim dẫn tới id lạ → `insufficient_evidence` (`CLAIM_UNGROUNDED`).
 - Tài liệu chưa duyệt (`needs_review`, gồm mọi PDF) vẫn được dùng nhưng câu trả lời có `warnings` yêu cầu đối chiếu bản gốc.
 - Lần gọi model cuối trong ngân sách chỉ được dùng `submit_answer`, để agent tổng hợp từ evidence đã có thay vì dừng ở `TOOL_BUDGET`.
-- Thứ tự chạy: service embedding → `pnpm.cmd dev` → crawl (nếu chưa có dữ liệu) → hỏi chatbot. Service embedding tắt: tool trả `unavailable`, chatbot trả `insufficient_evidence`.
+- Thứ tự chạy: `docker compose -f docker-compose.app.yml up -d` → crawl (nếu chưa có dữ liệu) → hỏi chatbot. Service embedding tắt: tool trả `unavailable`, chatbot trả `insufficient_evidence`.
 
 Hạn chế đã biết: một số PDF cũ dùng font TCVN3/VNI nên chữ trích ra bị lỗi; PDF scan chưa có OCR; kho có văn bản nhiều năm học nên câu hỏi về học phí thường cần hỏi lại năm học; chưa có bộ golden question để đo chất lượng.
 
-Kiểm tra code bằng `pnpm.cmd lint`, `pnpm.cmd typecheck`, `pnpm.cmd build`. Kiểm thử chức năng crawler do bạn thực hiện qua Postman. Không cần Docker để chạy crawler.
+Kiểm tra code bằng `pnpm.cmd lint`, `pnpm.cmd typecheck`, `pnpm.cmd build`. Kiểm thử chức năng crawler do bạn thực hiện qua Postman.
 
 ## Bảo vệ thông tin cá nhân
 
@@ -279,15 +319,16 @@ Có thể kiểm tra chức năng qua các endpoint Postman ở trên.
 
 ## Mã nguồn chính
 
-| Thành phần               | File                                                                                                                  |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| HTTP app/server          | [app.ts](src/app.ts), [server.ts](src/server.ts)                                                                      |
-| Nguồn crawl và điều phối | [sources.ts](src/crawler/sources.ts), [engine.ts](src/crawler/engine.ts)                                              |
-| Trích xuất HTML/PDF      | [extract.ts](src/crawler/extract.ts)                                                                                  |
-| API và lưu hội thoại     | [routes.ts](src/chat/routes.ts), [service.ts](src/chat/service.ts), [repository.ts](src/chat/repository.ts)           |
-| Gemini và LangGraph      | [model.ts](src/agent/model.ts), [graph.ts](src/agent/graph.ts)                                                        |
-| Guardrail và kiểm căn cứ | [policy.ts](src/guardrails/policy.ts)                                                                                 |
-| Tools tra cứu (RAG)      | [rag.ts](src/knowledge/rag.ts), [stub.ts](src/knowledge/stub.ts) (interface + stub dự phòng)                          |
-| Embedding                | [chunker.ts](src/embedding/chunker.ts), [pipeline.ts](src/embedding/pipeline.ts), [app.py](services/embedding/app.py) |
-| MongoDB setup            | [config.ts](src/db/config.ts), [setup.ts](src/db/setup.ts)                                                            |
-| Logger                   | [logger.ts](src/observability/logger.ts)                                                                              |
+| Thành phần               | File                                                                                                                                       |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| HTTP app/server          | [app.ts](src/app.ts), [server.ts](src/server.ts)                                                                                           |
+| Nguồn crawl và điều phối | [sources.ts](src/crawler/sources.ts), [engine.ts](src/crawler/engine.ts)                                                                   |
+| Trích xuất HTML/PDF      | [extract.ts](src/crawler/extract.ts)                                                                                                       |
+| API và lưu hội thoại     | [routes.ts](src/chat/routes.ts), [service.ts](src/chat/service.ts), [repository.ts](src/chat/repository.ts)                                |
+| Gemini và LangGraph      | [model.ts](src/agent/model.ts), [graph.ts](src/agent/graph.ts)                                                                             |
+| Guardrail và kiểm căn cứ | [policy.ts](src/guardrails/policy.ts)                                                                                                      |
+| Tools tra cứu (RAG)      | [rag.ts](src/knowledge/rag.ts), [stub.ts](src/knowledge/stub.ts) (interface + stub dự phòng)                                               |
+| Embedding                | [chunker.ts](src/embedding/chunker.ts), [pipeline.ts](src/embedding/pipeline.ts), [app.py](services/embedding/app.py)                      |
+| MongoDB setup            | [config.ts](src/db/config.ts), [setup.ts](src/db/setup.ts)                                                                                 |
+| Logger                   | [logger.ts](src/observability/logger.ts)                                                                                                   |
+| Docker                   | [Dockerfile](Dockerfile), [services/embedding/Dockerfile](services/embedding/Dockerfile), [docker-compose.app.yml](docker-compose.app.yml) |
