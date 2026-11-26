@@ -307,11 +307,21 @@ export class ChatService {
               signal,
             ));
       signal.throwIfAborted();
+      // A student's profile is shown once to its owner and never stored; history and replay
+      // get a note instead.
+      const stored =
+        toolPlan?.id === 'get_student_info' && result.status === 'answered'
+          ? {
+              ...result,
+              answer:
+                'Đã hiển thị hồ sơ sinh viên. Nội dung hồ sơ không được lưu; hãy hỏi lại để xem.',
+            }
+          : result;
       // Context from blocked/support messages must not poison later turns.
       await this.store.complete(
         record,
         screen.retainUser ? mergedContext : publicContext(conversation.context),
-        result,
+        stored,
       );
       logger.info('chat.turn.completed', {
         status: result.status,

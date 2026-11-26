@@ -105,7 +105,13 @@ export function checkInput(
   if (
     /(?:xem|lay|tra cuu|cho).{0,35}(?:diem|ho so|thong tin ca nhan).{0,30}(?:cua ban |sinh vien khac|nguoi khac)/u.test(
       value,
-    )
+    ) ||
+    // get_student_info only returns the signed-in student's profile, so a request naming a
+    // specific MSSV (8-10 digits) must not fall through to it and leak/misattribute a profile.
+    (/(?<!\d)\d{8,10}(?!\d)/u.test(value) &&
+      /(?:diem|ho so|thong tin|lop|co van|trang thai hoc|cpa|gpa|ket qua hoc tap|lich hoc|hoc phi)/u.test(
+        value,
+      ))
   )
     return {
       message,
@@ -117,7 +123,9 @@ export function checkInput(
       ),
     };
   if (
-    /(?:xem|tra cuu|kiem tra).{0,30}(?:diem|ho so|trang thai don).{0,20}(?:cua em|cua toi|cua minh)/u.test(
+    // Own profile goes on to get_student_info; grades and applications still need auth.
+    // CPA/GPA are part of get_student_info; per-course grades still need auth.
+    /(?:xem|tra cuu|kiem tra).{0,30}(?:diem(?!\s*(?:cpa|gpa|trung binh|tich luy))|trang thai don).{0,20}(?:cua em|cua toi|cua minh)/u.test(
       value,
     )
   )

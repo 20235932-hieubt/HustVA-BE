@@ -154,6 +154,8 @@ export class ToolManager {
     if (!settings.enabled) return base('disabled', 'TOOL_DISABLED');
     if (!this.client.configured())
       return base('not_configured', 'UPSTREAM_NOT_CONFIGURED');
+    if (tool.studentBound && !this.client.studentConfigured())
+      return base('not_configured', 'STUDENT_NOT_CONFIGURED');
     if (this.active >= 8) return base('busy', 'TOOL_CONCURRENCY_LIMIT');
     const deadline = AbortSignal.timeout(settings.timeoutMs);
     const signal = callerSignal

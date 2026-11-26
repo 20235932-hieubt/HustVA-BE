@@ -15,6 +15,10 @@ export interface ToolDefinition {
   warnings: string[];
   defaultEnabled: boolean;
   timeoutMs: number;
+  /** The backend adds studentId from DEMO_STUDENT_ID; the model and the caller cannot set it. */
+  studentBound?: boolean;
+  /** Called by the backend only; never offered to the model for selection. */
+  internal?: boolean;
 }
 
 function partner(
@@ -66,6 +70,26 @@ export const toolCatalog: readonly ToolDefinition[] = [
       keyWord: keyword,
     },
   ),
+  {
+    ...partner(
+      'get_student_info',
+      'student/info',
+      'Hồ sơ của chính sinh viên đang hỏi: họ tên, lớp, ngành, trường/khoa, trạng thái học, cố vấn học tập, CPA, GPA, tín chỉ tích lũy, mức cảnh báo học tập.',
+      {},
+    ),
+    studentBound: true,
+  },
+  {
+    // Part of get_student_info: the backend picks the latest main semester with results.
+    ...partner(
+      'get_academic_result',
+      'academicresult',
+      'Kết quả học tập một học kỳ của chính sinh viên: GPA, CPA, tín chỉ, mức cảnh báo.',
+      { semester: z.string().regex(/^\d{4}[12]$/u) },
+    ),
+    studentBound: true,
+    internal: true,
+  },
 ];
 
 export function findTool(id: string): ToolDefinition | undefined {

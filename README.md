@@ -166,8 +166,8 @@ Replay cùng UUID và nội dung gốc tái tạo mapping trong RAM để trả 
 
 ## HUST tools và tool management — giai đoạn 1
 
-Phạm vi hiện tại gồm **5 tool dữ liệu dùng chung** từ HUST Partner. Mỗi tool gọi
-một endpoint độc lập, không cần MSSV và không có workflow nhiều bước.
+Phạm vi hiện tại gồm **5 tool dữ liệu dùng chung** và 1 tool hồ sơ sinh viên từ HUST Partner. Mỗi tool gọi
+một endpoint độc lập, không có workflow nhiều bước.
 
 | Tool                    | Endpoint                    | Tham số                    |
 | ----------------------- | --------------------------- | -------------------------- |
@@ -176,8 +176,24 @@ một endpoint độc lập, không cần MSSV và không có workflow nhiều b
 | `get_advanced_programs` | `/student/kscs`             | `{ "programId": "IT1" }`   |
 | `search_teachers`       | `/teacher/search`           | `{ "keyWord": "từ khóa" }` |
 | `search_companies`      | `/company/search`           | `{ "keyWord": "từ khóa" }` |
+| `get_student_info`      | `/student/info`             | `{}` (MSSV do backend gắn) |
+| `get_academic_result`   | `/academicresult`           | `{ "semester": "20252" }`  |
 
-Các tool hồ sơ sinh viên, điểm, thời khóa biểu, lịch thi, chương trình đào tạo,
+`get_student_info` trả hồ sơ học vụ của sinh viên đang hỏi: họ tên, MSSV, lớp,
+chương trình, trường/khoa, trạng thái, cố vấn học tập, và kết quả học tập của học
+kỳ chính gần nhất có dữ liệu (CPA, GPA học kỳ, tín chỉ tích lũy, tín chỉ đăng ký,
+mức cảnh báo). Backend lấy học kỳ hiện tại từ `/semesters` rồi lùi tối đa 4 học kỳ
+chính (bỏ kỳ hè) để gọi `get_academic_result`; tool này là nội bộ, model không chọn
+được. Câu hỏi "CPA/GPA/tín chỉ của tôi" cũng dùng `get_student_info`. Model chọn `fields` (`identity`, `class`, `program`, `status`, `advisor`, `cpa`, `gpa`, `credits`, `warning`) để chỉ hiện phần được hỏi; từ khóa trong câu hỏi (ví dụ "cpa", "cố vấn", "tín chỉ") được ưu tiên hơn lựa chọn của model; hỏi chung về hồ sơ thì hiện toàn bộ. `fields` chỉ dùng ở backend, không gửi sang API HUST. Chưa có đăng nhập sinh
+viên, nên MSSV lấy từ `DEMO_STUDENT_ID` (8–10 chữ số, MSSV ban tổ chức chỉ định) và
+không bao giờ lấy từ nội dung chat hay tham số của model; mọi người dùng cùng xem
+hồ sơ này, chỉ phù hợp để demo. Thiếu `DEMO_STUDENT_ID` thì câu hỏi hồ sơ trả
+`requires_authentication`. Ngày sinh, giới tính, số điện thoại và email cá nhân
+không hiển thị. Hồ sơ chỉ trả cho người hỏi; MongoDB lưu một dòng ghi chú thay cho
+nội dung, nên lịch sử và replay không chứa hồ sơ. Câu hỏi điểm từng môn của chính
+mình vẫn trả `requires_authentication`.
+
+Các tool điểm, thời khóa biểu, lịch thi, chương trình đào tạo,
 đề tài, eHUST, workflow bảng điểm và cache học phần chưa nằm trong giai đoạn này;
 adapter và nhánh xử lý tương ứng đã được gỡ khỏi mã nguồn. Chat gọi 5 tool trên
 qua Gemini function calling: LLM chọn tool và tham số theo ngữ nghĩa câu hỏi,
@@ -191,6 +207,7 @@ Luồng tri thức sử dụng RAG trên kho tài liệu đã embed; `StubKnowle
 | Chương trình kỹ sư chuyên sâu của IT1 | `get_advanced_programs` |
 | Tìm giảng viên tên Nguyễn             | `search_teachers`       |
 | Tìm công ty FPT                       | `search_companies`      |
+| Xem hồ sơ của tôi / Cố vấn của tôi    | `get_student_info`      |
 
 [selector.ts](src/tools/selector.ts) đăng ký schema 5 tool và hai nhánh điều khiển
 hỏi lại/chuyển luồng tri thức với Gemini. Mỗi lượt chọn tối đa một tool. Backend
@@ -220,12 +237,12 @@ kết quả đầu và số lượng trong phản hồi API; không khẳng đ�
 cầu `Authorization: Bearer <TOOL_MANAGEMENT_TOKEN>`, kể cả GET. Thiếu token hoặc
 token ngắn trả 503; token sai trả 401. Biến eHUST/cache cũ không còn được module đọc.
 
-| Method | Endpoint                    | Chức năng                                          |
-| ------ | --------------------------- | -------------------------------------------------- |
-| GET    | `/api/v1/tools`             | Danh sách 5 tool, JSON Schema, settings và metrics |
-| GET    | `/api/v1/tools/:id`         | Chi tiết tool                                      |
-| PATCH  | `/api/v1/tools/:id`         | Cập nhật bật/tắt, timeout và retry                 |
-| POST   | `/api/v1/tools/:id/execute` | Thực thi với body `{ "arguments": { ... } }`       |
+| Method | Endpoint                    | Chức năng                                        |
+| ------ | --------------------------- | ------------------------------------------------ |
+| GET    | `/api/v1/tools`             | Danh sách tool, JSON Schema, settings và metrics |
+| GET    | `/api/v1/tools/:id`         | Chi tiết tool                                    |
+| PATCH  | `/api/v1/tools/:id`         | Cập nhật bật/tắt, timeout và retry               |
+| POST   | `/api/v1/tools/:id/execute` | Thực thi với body `{ "arguments": { ... } }`     |
 
 Request ghi cần `Content-Type: application/json`; Origin trình duyệt phải là
 `WEB_ORIGIN` hoặc `API_ORIGIN`. Frontend có trang `/tools` dùng cùng
@@ -257,9 +274,10 @@ Cấu hình file hiện phục vụ một tiến trình backend.
 
 Tool đã gỡ không xuất hiện trong registry, không gọi được qua execute và không
 thể bật lại qua PATCH. Settings cũ của chúng bị bỏ qua khi load. Backend khác có
-thể gọi `ToolManager.execute(id, args, signal?)` cho 5 tool dùng chung này.
-Chưa có cơ chế xác thực sinh viên hoặc allowlist MSSV vì phạm vi hiện tại không
-đọc dữ liệu sinh viên.
+thể gọi `ToolManager.execute(id, args, signal?)` cho các tool này.
+Chưa có cơ chế xác thực sinh viên; `get_student_info` chỉ đọc hồ sơ của
+`DEMO_STUDENT_ID`. Gọi tool này qua `/api/v1/tools/get_student_info/execute`
+trả dữ liệu thô của hồ sơ, nên chỉ cấp `TOOL_MANAGEMENT_TOKEN` cho người quản trị.
 
 Các bài kiểm thử tự động và script kiểm thử API thật đã được chuyển sang
 `../kiem-thu/be`, giữ nguyên nội dung để tham khảo hoặc khôi phục khi cần.
