@@ -435,6 +435,15 @@ HUST thật, Microsoft SSO hoặc hạ tầng Mongo đang hoạt động.
 
 ## Trace và kiểm tra code
 
+### Định dạng câu trả lời
+
+`answer` hỗ trợ Markdown. Prompt ưu tiên trả lời bằng đoạn văn ngắn, chỉ dùng
+danh sách cho các bước/mục song song và bảng khi dữ liệu phù hợp. Backend vẫn
+kiểm chứng evidenceIds của từng claim rồi ghép các đoạn bằng dòng trống, gắn
+số trích dẫn `[1]`, `[2]`. Nguồn nằm trong `citations`, không lặp thêm mục Nguồn
+trong chuỗi answer; client cần render danh sách citations riêng. Tool điểm trả
+bảng Markdown theo học kỳ, vẫn giữ giới hạn 30 dòng, 9000 ký tự và không lưu điểm.
+
 Backend ghi log JSON ra terminal. Đặt `LOG_LEVEL=debug` trong `.env` rồi restart để xem thêm các bước xử lý. Lấy header `X-Trace-Id` trong response Postman để tìm log; lượt chat có thêm `requestId`/`runId` và thời gian xử lý. Logger không ghi body chat, prompt, token, API key hoặc payload lỗi thô.
 
 ```powershell

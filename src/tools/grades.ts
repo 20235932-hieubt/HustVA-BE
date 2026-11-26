@@ -77,26 +77,37 @@ export function renderGrades(data: unknown): string | undefined {
       String(a.classId).localeCompare(String(b.classId)),
   );
   const value = (item: unknown) =>
-    item == null ? 'chưa có dữ liệu' : String(item);
+    (item == null ? 'chưa có dữ liệu' : String(item)).replace(
+      /[\\|`*_[\]<>]/gu,
+      '\\$&',
+    );
   const lines = [
-    `Kết quả tra cứu: ${rows.length} dòng điểm.`,
+    `Kết quả tra cứu: **${rows.length} dòng điểm**.`,
     'Giữ nguyên các lần học theo nguồn HUST; không tự tính GPA/CPA.',
   ];
   let semester: string | undefined;
   let shown = 0;
   for (const row of sorted.slice(0, 30)) {
-    const line = `- ${row.courseId} (lớp ${row.classId}): quá trình ${value(row.processMark)}; cuối kỳ ${value(row.examMark)}; điểm chữ ${value(row.finalMarkLetter)}; trạng thái nguồn ${value(row.status)}.`;
-    if (lines.join('\n').length + line.length > 9000) break;
+    const line = `| ${value(row.courseId)} | ${value(row.classId)} | ${value(row.processMark)} | ${value(row.examMark)} | ${value(row.finalMarkLetter)} | ${value(row.status)} |`;
+    const section =
+      semester !== row.semester
+        ? [
+            `\n### Học kỳ ${row.semester}\n`,
+            '| Học phần | Lớp | Quá trình | Cuối kỳ | Điểm chữ | Trạng thái nguồn |',
+            '| --- | --- | --- | --- | --- | --- |',
+          ]
+        : [];
+    if ([...lines, ...section, line].join('\n').length > 9000) break;
     if (semester !== row.semester) {
       semester = row.semester;
-      lines.push(`\nHọc kỳ ${semester}:`);
+      lines.push(...section);
     }
     lines.push(line);
     shown++;
   }
   if (rows.length > shown)
     lines.push(
-      `Chỉ hiển thị ${shown} dòng đầu. Hãy lọc theo học kỳ hoặc mã học phần để xem cụ thể hơn.`,
+      `\nChỉ hiển thị ${shown} dòng đầu. Hãy lọc theo học kỳ hoặc mã học phần để xem cụ thể hơn.`,
     );
   return lines.join('\n');
 }

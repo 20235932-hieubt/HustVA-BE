@@ -237,29 +237,20 @@ export function validateDraft(
     (claim) =>
       `${privacy ? privacy.pseudonymize(claim.text) : claim.text.trim()} [${[...new Set(claim.evidenceIds.map(number))].sort((a, b) => a - b).join(', ')}]`,
   );
-  const sources = used.map(
-    (evidence, index) =>
-      `[${index + 1}] ${evidence.title ?? 'Tài liệu HUST'}${evidence.location ? ` (${evidence.location})` : ''}${evidence.url ? ` - ${evidence.url}` : ''}`,
-  );
   const unreviewed = used.some((evidence) => evidence.quality !== 'accepted');
-  return reply(
-    'answered',
-    `${sentences.join('\n')}\n\nNguồn:\n${sources.join('\n')}`,
-    'GROUNDED',
-    {
-      citations: used.map((evidence) => ({
-        evidenceId: evidence.id,
-        title: evidence.title ?? '',
-        url: evidence.url ?? '',
-        documentId: evidence.documentId ?? '',
-        versionId: evidence.versionId ?? '',
-        location: evidence.location ?? '',
-      })),
-      warnings: unreviewed
-        ? [
-            'Nội dung trích từ tài liệu chưa được duyệt (thường là PDF); hãy đối chiếu bản gốc theo link nguồn.',
-          ]
-        : [],
-    },
-  );
+  return reply('answered', sentences.join('\n\n'), 'GROUNDED', {
+    citations: used.map((evidence) => ({
+      evidenceId: evidence.id,
+      title: evidence.title ?? '',
+      url: evidence.url ?? '',
+      documentId: evidence.documentId ?? '',
+      versionId: evidence.versionId ?? '',
+      location: evidence.location ?? '',
+    })),
+    warnings: unreviewed
+      ? [
+          'Nội dung trích từ tài liệu chưa được duyệt (thường là PDF); hãy đối chiếu bản gốc theo link nguồn.',
+        ]
+      : [],
+  });
 }
