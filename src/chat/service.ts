@@ -11,7 +11,12 @@ import { checkInput, hasSecret, normalize } from '../guardrails/policy.js';
 import { isGradeTool } from '../tools/grades.js';
 import { isPrivateTool } from '../tools/student-data.js';
 import {
+  examSemesterFromContext,
+  type ToolBudget,
+} from '../tools/exam-semester.js';
+import {
   isGradeLookupRequest,
+  isExamLookupRequest,
   prepareStudentSubjects,
   type StudentSubjectStore,
 } from '../tools/student-subject.js';
@@ -84,6 +89,8 @@ export class ChatService {
     private readonly gradeOptions:
       | { enabled: boolean; subjects: StudentSubjectStore }
       | undefined = undefined,
+    private readonly examOptions:
+      ({ enabled: boolean } & ToolBudget) | undefined = undefined,
   ) {}
   async create(principal?: DemoPrincipal) {
     await principal?.validate();
@@ -219,6 +226,22 @@ export class ChatService {
     });
     if (
       !screen.result &&
+      isExamLookupRequest(input.message) &&
+      (!principal || !this.examOptions?.enabled)
+    )
+      screen.result = principal
+        ? reply(
+            'insufficient_evidence',
+            'Tính năng tra cứu lịch thi chưa được bật trong môi trường này.',
+            'HUST_EXAMS_DISABLED',
+          )
+        : reply(
+            'requires_authentication',
+            'Vui lòng đăng nhập tài khoản demo trên trang bên ngoài để tra cứu lịch thi của bạn.',
+            'DEMO_AUTH_REQUIRED',
+          );
+    if (
+      !screen.result &&
       (!this.gradeOptions?.enabled || !principal) &&
       isGradeLookupRequest(input.message)
     )
@@ -342,12 +365,13 @@ export class ChatService {
       await this.store.begin(record);
       logger.debug('chat.request.persisted');
       const prepared =
-        !screen.result && this.gradeOptions?.enabled
+        !screen.result &&
+        (this.gradeOptions?.enabled || this.examOptions?.enabled)
           ? prepareStudentSubjects(
               input.message,
               principal
                 ? undefined
-                : await this.gradeOptions.subjects.load(id, tokenHash(token)),
+                : await this.gradeOptions?.subjects.load(id, tokenHash(token)),
               privacy,
               conversation.expiresAt,
             )
@@ -360,6 +384,27 @@ export class ChatService {
           : selfRef;
         // Authenticated identity is never written as a self-declared binding.
         prepared.next = undefined;
+      }
+      if (prepared && principal && this.examOptions?.enabled) {
+        const recent = (await this.store.list(id, 10, 0)).find(
+          (turn) =>
+            turn.status === 'completed' &&
+            turn.examLookup &&
+            turn.examLookup.expiresAt > new Date() &&
+            Date.now() - turn.createdAt.getTime() <= 30 * 60_000,
+        );
+        if (recent?.examLookup) {
+          prepared.references.examLookupPending = !recent.examLookup.semester;
+          prepared.references.examSemester = examSemesterFromContext(
+            recent.examLookup.semester
+              ? {
+                  code: recent.examLookup.semester,
+                  establishedAt: recent.createdAt,
+                  expiresAt: recent.examLookup.expiresAt,
+                }
+              : undefined,
+          );
+        }
       }
       privacy.seal();
       const mergedContext = publicContext({
@@ -428,6 +473,23 @@ export class ChatService {
               'HUST_GRADES_CLARIFICATION',
             )
           : undefined;
+      const examFallback =
+        !screen.result &&
+        !subjectResult &&
+        isExamLookupRequest(input.message) &&
+        toolPlan?.id !== 'get_exams'
+          ? reply(
+              'needs_clarification',
+              'Bạn muốn tra lịch thi học kỳ nào? Hãy gửi mã học kỳ hoặc nói “kỳ hiện tại”.',
+              'HUST_EXAM_SEMESTER_REQUIRED',
+            )
+          : undefined;
+      if (toolPlan?.id === 'get_exams' && !this.examOptions?.enabled)
+        throw new ChatError(
+          403,
+          'HUST_EXAMS_DISABLED',
+          'Tra cứu lịch thi chưa được bật trong môi trường này.',
+        );
       if (isGradeTool(toolPlan?.id ?? '') && !this.gradeOptions?.enabled)
         throw new ChatError(
           403,
@@ -445,6 +507,7 @@ export class ChatService {
       const result =
         screen.result ??
         subjectResult ??
+        examFallback ??
         gradeFallback ??
         (toolPlan && this.tools
           ? await abortable(
@@ -453,6 +516,20 @@ export class ChatService {
                 this.tools,
                 signal,
                 principal ? demoToolAccess(principal) : undefined,
+                {
+                  budget: this.examOptions,
+                  onExamSemester: (semester) => {
+                    record.examLookup = {
+                      semester,
+                      expiresAt: new Date(
+                        Math.min(
+                          conversation.expiresAt.getTime(),
+                          Date.now() + 30 * 60_000,
+                        ),
+                      ),
+                    };
+                  },
+                },
               ),
               signal,
             )
@@ -465,6 +542,15 @@ export class ChatService {
             ));
       signal.throwIfAborted();
       if (isPrivateTool(toolPlan?.id ?? '')) await principal?.validate();
+      if (toolPlan?.id === 'get_exams' && !record.examLookup)
+        record.examLookup = {
+          expiresAt: new Date(
+            Math.min(
+              conversation.expiresAt.getTime(),
+              Date.now() + 30 * 60_000,
+            ),
+          ),
+        };
       if (prepared?.next && this.gradeOptions?.enabled)
         await this.gradeOptions.subjects.save(
           id,
@@ -481,12 +567,16 @@ export class ChatService {
         ? {
             ...reply(
               'handoff',
-              isGradeTool(toolPlan?.id ?? '')
-                ? 'Kết quả điểm cá nhân chỉ được trả trực tiếp, không lưu trong lịch sử. Gửi yêu cầu mới để tra cứu lại.'
-                : 'Đã hiển thị hồ sơ sinh viên. Nội dung hồ sơ không được lưu; hãy hỏi lại để xem.',
-              isGradeTool(toolPlan?.id ?? '')
-                ? 'HUST_GRADES_NOT_STORED'
-                : 'HUST_PROFILE_NOT_STORED',
+              toolPlan?.id === 'get_exams'
+                ? 'Đã hiển thị phản hồi tra cứu lịch thi. Lịch thi cá nhân không được lưu; hãy gửi yêu cầu mới để tra cứu lại.'
+                : isGradeTool(toolPlan?.id ?? '')
+                  ? 'Kết quả điểm cá nhân chỉ được trả trực tiếp, không lưu trong lịch sử. Gửi yêu cầu mới để tra cứu lại.'
+                  : 'Đã hiển thị hồ sơ sinh viên. Nội dung hồ sơ không được lưu; hãy hỏi lại để xem.',
+              toolPlan?.id === 'get_exams'
+                ? 'HUST_EXAMS_NOT_STORED'
+                : isGradeTool(toolPlan?.id ?? '')
+                  ? 'HUST_GRADES_NOT_STORED'
+                  : 'HUST_PROFILE_NOT_STORED',
             ),
             retrievalMode: 'hust_api' as const,
           }

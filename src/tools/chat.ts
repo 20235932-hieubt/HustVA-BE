@@ -1,12 +1,17 @@
 import type { ToolAccess } from '../auth/tool-access.js';
 import { z } from 'zod';
-import { reply, type ChatResult } from '../chat/contracts.js';
+import { ChatError, reply, type ChatResult } from '../chat/contracts.js';
 
 import type { ToolResult } from './contracts.js';
 import { isGradeTool, renderGrades } from './grades.js';
 import { logger } from '../observability/logger.js';
+import type { ExamSemesterSelection } from './exam-semester.js';
+import { resolveExamSemester, type ToolBudget } from './exam-semester.js';
+import { renderExams } from './exams.js';
+import { authorizeStudentData } from '../auth/tool-access.js';
 
 export interface ChatTools {
+  isEnabled?(id: string): Promise<boolean>;
   execute(
     id: string,
     input: unknown,
@@ -23,6 +28,9 @@ export interface ToolPlan {
   refusal?: boolean;
   /** Parts of the student profile the question asks about; undefined means all of them. */
   fields?: ProfileField[];
+  examSemester?: ExamSemesterSelection;
+  /** Resolved locally, never forwarded to upstream or model. */
+  studentId?: string;
 }
 
 export const profileFields = [
@@ -218,6 +226,10 @@ export async function runChatTool(
   tools: ChatTools,
   signal: AbortSignal,
   access?: ToolAccess,
+  options?: {
+    budget?: ToolBudget;
+    onExamSemester?: (semester: string) => void;
+  },
 ): Promise<ChatResult> {
   const response = (
     status: ChatResult['status'],
@@ -241,6 +253,52 @@ export async function runChatTool(
       'HUST_ARGUMENT_REQUIRED',
     );
   signal.throwIfAborted();
+  if (plan.id === 'get_exams') {
+    try {
+      // Check trusted access before even the shared semester lookup.
+      await authorizeStudentData(plan.studentId, access);
+    } catch (error) {
+      if (error instanceof ChatError && error.code === 'HUST_STUDENT_FORBIDDEN')
+        return response(
+          'blocked',
+          'Bạn chỉ được tra cứu lịch thi của tài khoản đang đăng nhập.',
+          error.code,
+        );
+      return response(
+        'requires_authentication',
+        'Vui lòng đăng nhập lại tài khoản demo để tra cứu lịch thi.',
+        'DEMO_AUTH_REQUIRED',
+      );
+    }
+    if (tools.isEnabled && !(await tools.isEnabled('get_exams')))
+      return response(
+        'insufficient_evidence',
+        'Tính năng tra cứu lịch thi đang tạm ngừng.',
+        'HUST_EXAMS_DISABLED',
+      );
+    if (!plan.examSemester)
+      return response(
+        'needs_clarification',
+        'Bạn muốn tra lịch thi học kỳ nào?',
+        'HUST_EXAM_SEMESTER_REQUIRED',
+      );
+    const resolved = await resolveExamSemester(
+      plan.examSemester,
+      tools,
+      signal,
+      access,
+      options?.budget,
+    );
+    if (resolved.status !== 'resolved')
+      return response(
+        resolved.status === 'clarify'
+          ? 'needs_clarification'
+          : 'insufficient_evidence',
+        resolved.answer,
+        resolved.reasonCode,
+      );
+    plan = { ...plan, arguments: { semester: resolved.semester } };
+  }
   let result: ToolResult;
   try {
     result = await tools.execute(plan.id, plan.arguments, signal, access);
@@ -253,6 +311,8 @@ export async function runChatTool(
     );
   }
   signal.throwIfAborted();
+  if (plan.id === 'get_exams' && ['success', 'empty'].includes(result.status))
+    options?.onExamSemester?.(String(plan.arguments.semester));
   if (result.errorCode === 'DEMO_AUTH_REQUIRED')
     return response(
       'requires_authentication',
@@ -268,11 +328,13 @@ export async function runChatTool(
   if (result.status === 'empty')
     return response(
       'insufficient_evidence',
-      isGradeTool(plan.id)
-        ? 'HUST chưa trả dữ liệu điểm cho yêu cầu này. Điều này không có nghĩa là điểm bằng 0 hoặc chưa đăng ký học.'
-        : plan.id.startsWith('search_')
-          ? 'Mình chưa tìm thấy kết quả phù hợp. Bạn thử nhập tên hoặc từ khóa khác nhé.'
-          : 'Mình chưa tìm thấy thông tin này. Bạn thử lại sau nhé.',
+      plan.id === 'get_exams'
+        ? 'HUST chưa trả lịch thi cho học kỳ này. Điều này không có nghĩa là bạn không có lịch thi hoặc không phải dự thi.'
+        : isGradeTool(plan.id)
+          ? 'HUST chưa trả dữ liệu điểm cho yêu cầu này. Điều này không có nghĩa là điểm bằng 0 hoặc chưa đăng ký học.'
+          : plan.id.startsWith('search_')
+            ? 'Mình chưa tìm thấy kết quả phù hợp. Bạn thử nhập tên hoặc từ khóa khác nhé.'
+            : 'Mình chưa tìm thấy thông tin này. Bạn thử lại sau nhé.',
       'HUST_TOOL_EMPTY',
     );
   if (
@@ -307,9 +369,11 @@ export async function runChatTool(
     );
   }
   const answer =
-    plan.id === 'get_student_info'
-      ? await profileAnswer(result.data, plan.fields, tools, signal, access)
-      : render(plan, result.data);
+    plan.id === 'get_exams'
+      ? renderExams(result.data, String(plan.arguments.semester))
+      : plan.id === 'get_student_info'
+        ? await profileAnswer(result.data, plan.fields, tools, signal, access)
+        : render(plan, result.data);
   if (!answer || answer.length > 10000)
     return response(
       'insufficient_evidence',

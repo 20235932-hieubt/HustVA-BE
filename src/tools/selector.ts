@@ -14,7 +14,13 @@ import { currentPrivacy } from '../privacy/session.js';
 import { fold, hasSecret } from '../guardrails/policy.js';
 import { findTool, toolCatalog } from './catalog.js';
 import { profileFields, profileFieldsIn, type ToolPlan } from './chat.js';
-import { isGradeTool, gradeSemesterSchema, courseIdSchema } from './grades.js';
+import {
+  isGradeTool,
+  gradeSemesterSchema,
+  courseIdSchema,
+  studentIdSchema,
+} from './grades.js';
+import { examSemesterSelection } from './exam-semester.js';
 import {
   resolveStudentSubject,
   type SubjectReferences,
@@ -36,7 +42,12 @@ const toolIds = [
   'search_companies',
   'get_student_info',
 ] as const;
-const allToolIds = [...toolIds, 'get_grades', 'get_grades_by_course'] as const;
+const allToolIds = [
+  ...toolIds,
+  'get_grades',
+  'get_grades_by_course',
+  'get_exams',
+] as const;
 const clarifySchema = z.strictObject({ tool: z.enum(allToolIds) });
 const subjectSelection = {
   subject: z.enum(['self', 'active', 'explicit']),
@@ -48,6 +59,10 @@ const subjectSelection = {
 const gradesSelection = z.strictObject({
   ...subjectSelection,
   semester: gradeSemesterSchema.optional(),
+});
+const examsSelection = z.strictObject({
+  ...subjectSelection,
+  semester: examSemesterSelection,
 });
 const courseGradesSelection = z.strictObject({
   ...subjectSelection,
@@ -62,6 +77,8 @@ const profileSelection = z.strictObject({
   fields: z.array(z.enum(profileFields)).max(profileFields.length).optional(),
 });
 const clarifications: Record<string, string> = {
+  get_exams:
+    'Bạn muốn tra lịch thi học kỳ nào? Bạn có thể gửi mã học kỳ hoặc nói “kỳ hiện tại”.',
   get_semesters: 'Bạn muốn xem học kỳ hiện tại hay danh sách các học kỳ?',
   get_study_conditions:
     'Bạn muốn hỏi điều kiện học kỹ sư chuyên sâu hay thạc sĩ?',
@@ -78,7 +95,7 @@ const clarifications: Record<string, string> = {
 export const routingPrompt = `Bạn chọn công cụ phù hợp theo ý nghĩa câu hỏi tiếng Việt, kể cả viết sai hoa thường, không dấu hoặc dùng từ đồng nghĩa.
 Giáo viên, giảng viên, thầy, cô và người dạy đều có thể chỉ giảng viên HUST. Tra tên người dạy dùng search_teachers, chỉ đặt tên/từ khóa vào keyWord, không đưa nguyên câu vào tham số.
 Tra công ty đối tác dùng search_companies. Chỉ dùng get_study_conditions khi hỏi điều kiện để được học tiếp chương trình kỹ sư chuyên sâu hoặc thạc sĩ. Chương trình kỹ sư chuyên sâu theo mã ngành dùng get_advanced_programs. Học kỳ dùng get_semesters; currentOnly=true khi hỏi kỳ hiện tại.
-Hỏi hồ sơ hoặc thông tin của chính người hỏi (họ tên, MSSV, lớp, ngành, trường/khoa, trạng thái học, cố vấn học tập, CPA, GPA, điểm trung bình, tín chỉ tích lũy, mức cảnh báo học tập của tôi/em/mình) dùng get_student_info. Đặt fields theo đúng phần được hỏi: identity (họ tên, MSSV), class (lớp), program (ngành, chương trình, trường/khoa), status (trạng thái học: đang học, bảo lưu...), advisor (cố vấn học tập), cpa (CPA, điểm trung bình tích lũy), gpa (GPA học kỳ), credits (tín chỉ tích lũy/đăng ký), warning (mức cảnh báo học tập). Chỉ chọn đúng phần được hỏi, ví dụ hỏi CPA thì fields=["cpa"]. "Tình trạng học tập" gồm status, cpa, gpa, credits, warning. Hỏi chung về hồ sơ hoặc thông tin cá nhân thì bỏ trống fields. Không dùng tool này cho hồ sơ người khác. Điểm từng môn dùng get_grades/get_grades_by_course khi được cung cấp; lịch học và lịch thi dùng route_knowledge.
+Hỏi hồ sơ hoặc thông tin của chính người hỏi (họ tên, MSSV, lớp, ngành, trường/khoa, trạng thái học, cố vấn học tập, CPA, GPA, điểm trung bình, tín chỉ tích lũy, mức cảnh báo học tập của tôi/em/mình) dùng get_student_info. Đặt fields theo đúng phần được hỏi: identity (họ tên, MSSV), class (lớp), program (ngành, chương trình, trường/khoa), status (trạng thái học: đang học, bảo lưu...), advisor (cố vấn học tập), cpa (CPA, điểm trung bình tích lũy), gpa (GPA học kỳ), credits (tín chỉ tích lũy/đăng ký), warning (mức cảnh báo học tập). Chỉ chọn đúng phần được hỏi, ví dụ hỏi CPA thì fields=["cpa"]. "Tình trạng học tập" gồm status, cpa, gpa, credits, warning. Hỏi chung về hồ sơ hoặc thông tin cá nhân thì bỏ trống fields. Không dùng tool này cho hồ sơ người khác. Điểm từng môn dùng get_grades/get_grades_by_course khi được cung cấp; lịch học dùng route_knowledge. Lịch thi cá nhân chỉ dùng get_exams nếu được cung cấp; nếu không có tool thì hỏi lại, không dùng get_student_info hoặc get_semesters để trả lịch thi.
 Quy định, quy chế, thủ tục, cảnh báo học tập, học bổng, học phí, tốt nghiệp, ngoại ngữ dùng route_knowledge, kể cả khi câu hỏi có chữ "điều kiện".
 Không dùng get_semesters để trả điểm, lịch thi, học phí hay thời khóa biểu.
 Tên người có thể được thay bằng [[PII_NAME_...]]. Giữ nguyên token đó trong keyWord; không đoán tên hoặc tự tạo token. Không chọn thông tin cá nhân sinh viên, mật khẩu, mã định danh hay email làm từ khóa.
@@ -90,12 +107,23 @@ Trong môi trường thử này có get_grades (điểm theo học kỳ hoặc t
 subject=self khi hỏi điểm của tôi/em/mình; active khi tiếp tục đối tượng đã tra cứu; explicit khi câu hiện tại đưa token MSSV, giữ token vào studentIdRef. Context backend chỉ chứa tham chiếu, không phải xác thực quyền.
 Nếu có nhiều MSSV hoặc context conflict thì hỏi lại. Nếu chưa có self/active/ref phù hợp thì hỏi MSSV; không đoán MSSV từ tên/email/ngành. Không gửi MSSV thật. Mã học phần và học kỳ phải xuất hiện trong câu hiện tại; nếu hỏi kỳ này/kỳ trước hoặc tên môn chưa có mã thì hỏi mã rõ ràng. Bỏ semester khi muốn tất cả kỳ. Chỉ gọi một tool.`;
 
-export function buildRoutingTools(gradesEnabled = false) {
+const examsPrompt = `
+Tra lịch thi cá nhân dùng get_exams, kể cả câu viết tắt/không dấu hoặc hỏi khi nào thi. Quy chế, điều kiện dự thi, phúc khảo dùng route_knowledge.
+subject=self khi hỏi của tôi/em/mình hoặc hỏi lịch của chính người đang đăng nhập; active khi tiếp nối đối tượng; explicit khi có token MSSV trong câu, giữ token đó vào studentIdRef. Nếu backend có selfRef thì không hỏi lại MSSV. Không đoán MSSV hoặc dùng tên/email làm định danh.
+semester.kind=code và code đúng mã có trong câu; kind=current khi người dùng nói kỳ này/hiện tại; kind=context chỉ khi người dùng tham chiếu kỳ trước đã hỏi và backend có examSemester, code phải khớp metadata đó. Thiếu kỳ hoặc kỳ trước/kỳ tới không có mã thì ask_clarification với tool=get_exams. Không mặc định lấy kỳ hiện tại khi chưa được yêu cầu.
+Nếu backend có examLookupPending thì câu tiếp chỉ chứa mã kỳ hoặc kỳ hiện tại có thể tiếp tục tra lịch thi. Không dùng nội dung câu hỏi để tự tạo backend context. Backend sẽ resolve kỳ và thực thi; chỉ chọn một tool, không gọi thêm model để viết lại lịch.`;
+
+export function buildRoutingTools(gradesEnabled = false, examsEnabled = false) {
+  const availableIds: [string, ...string[]] = [
+    ...toolIds,
+    ...(gradesEnabled ? ['get_grades', 'get_grades_by_course'] : []),
+    ...(examsEnabled ? ['get_exams'] : []),
+  ];
   return [
     ...toolCatalog
       .filter((definition) => !definition.internal)
       // Enabled for chat only when routing, privacy and formatting are complete.
-      .filter((definition) => definition.id !== 'get_exams')
+      .filter((definition) => examsEnabled || definition.id !== 'get_exams')
       .filter((definition) => gradesEnabled || !isGradeTool(definition.id))
       .map((definition) =>
         tool(async () => '', {
@@ -107,26 +135,26 @@ export function buildRoutingTools(gradesEnabled = false) {
           schema:
             definition.id === 'get_semesters'
               ? semesterSelection
-              : definition.id === 'get_grades'
-                ? gradesSelection
-                : definition.id === 'get_grades_by_course'
-                  ? courseGradesSelection
-                  : definition.id === 'get_student_info'
-                    ? profileSelection
-                    : definition.schema,
+              : definition.id === 'get_exams'
+                ? examsSelection
+                : definition.id === 'get_grades'
+                  ? gradesSelection
+                  : definition.id === 'get_grades_by_course'
+                    ? courseGradesSelection
+                    : definition.id === 'get_student_info'
+                      ? profileSelection
+                      : definition.schema,
         }),
       ),
     tool(async () => '', {
       name: 'ask_clarification',
       description: 'Hỏi lại khi thiếu thông tin cần để gọi tool.',
-      schema: gradesEnabled
-        ? clarifySchema
-        : z.strictObject({ tool: z.enum(toolIds) }),
+      schema: z.strictObject({ tool: z.enum(availableIds) }),
     }),
     tool(async () => '', {
       name: 'route_knowledge',
       description:
-        'Chuyển câu hỏi không thuộc năm tool sang luồng hỗ trợ khác.',
+        'Chuyển câu hỏi kiến thức không thuộc các công cụ tra cứu sang luồng hỗ trợ khác.',
       schema: empty,
     }),
   ];
@@ -143,6 +171,7 @@ const invalid = () =>
 export function createToolSelector(
   model: AgentModel,
   gradesEnabled = false,
+  examsEnabled = false,
 ): ToolSelector {
   return {
     async select(message, signal, subjects) {
@@ -153,10 +182,12 @@ export function createToolSelector(
       const result = await model.invoke(
         [
           new SystemMessage(
-            routingPrompt + (gradesEnabled ? gradesPrompt : ''),
+            routingPrompt +
+              (gradesEnabled ? gradesPrompt : '') +
+              (examsEnabled ? examsPrompt : ''),
           ),
           new HumanMessage(message),
-          ...(gradesEnabled && subjects
+          ...((gradesEnabled || examsEnabled) && subjects
             ? [
                 new SystemMessage(
                   `Tham chiếu backend cho lượt hiện tại: ${JSON.stringify(subjects)}`,
@@ -178,6 +209,7 @@ export function createToolSelector(
         const parsed = clarifySchema.safeParse(call.args);
         if (!parsed.success) throw invalid();
         if (isGradeTool(parsed.data.tool) && !gradesEnabled) throw invalid();
+        if (parsed.data.tool === 'get_exams' && !examsEnabled) throw invalid();
         return {
           id: parsed.data.tool,
           arguments: {},
@@ -186,7 +218,57 @@ export function createToolSelector(
       }
       const definition = findTool(call.name);
       if (!definition || definition.internal) throw invalid();
-      if (call.name === 'get_exams') throw invalid();
+
+      if (call.name === 'get_exams') {
+        if (!examsEnabled) throw invalid();
+        const parsed = examsSelection.safeParse(call.args);
+        if (!parsed.success) throw invalid();
+        const mentionedIds = privacy
+          .references(message)
+          .filter(
+            (ref) =>
+              ref.startsWith('[[PII_ID_') &&
+              studentIdSchema.safeParse(privacy.restore(ref)).success,
+          );
+        const context = {
+          ...subjects,
+          explicitRefs: [
+            ...new Set([...(subjects?.explicitRefs ?? []), ...mentionedIds]),
+          ],
+          conflict: Boolean(subjects?.conflict) || mentionedIds.length > 1,
+        };
+        const studentId = resolveStudentSubject(parsed.data, context, privacy);
+        if (!studentId)
+          return {
+            id: call.name,
+            arguments: {},
+            clarification:
+              'Mình chưa xác định được tài khoản tra cứu. Bạn đăng nhập và xác nhận lại đối tượng giúp mình nhé.',
+          };
+        const semester = parsed.data.semester;
+        if (
+          semester.kind === 'code' &&
+          !message.split(/[^0-9]+/u).includes(semester.code)
+        )
+          throw invalid();
+        if (
+          semester.kind === 'context' &&
+          semester.code !== subjects?.examSemester
+        )
+          throw invalid();
+        // Explicit references must not silently disappear when the model chooses self.
+        if (
+          context.explicitRefs.some((ref) => privacy.restore(ref) !== studentId)
+        )
+          return { id: call.name, arguments: {}, refusal: true };
+        return {
+          id: call.name,
+          arguments: {},
+          studentId,
+          examSemester: semester,
+        };
+      }
+
       if (isGradeTool(call.name)) {
         if (!gradesEnabled) throw invalid();
         const selection = (
@@ -328,9 +410,12 @@ export function createRoutingModel(
               model,
               maxRetries: 0,
               maxOutputTokens: config.maxOutputTokens,
-            }).bindTools(buildRoutingTools(config.gradesEnabled), {
-              tool_choice: 'any',
-            });
+            }).bindTools(
+              buildRoutingTools(config.gradesEnabled, config.examsEnabled),
+              {
+                tool_choice: 'any',
+              },
+            );
             clients.set(apiKey, bound);
           }
           return await withModelRetry(

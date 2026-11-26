@@ -47,8 +47,17 @@ export function getChatService(): Promise<ChatService> {
         createChatAgent(createGeminiModel(config), knowledge, config),
         config.timeoutMs,
         getToolManager(),
-        createToolSelector(createRoutingModel(config), config.gradesEnabled),
+        createToolSelector(
+          createRoutingModel(config),
+          config.gradesEnabled,
+          config.examsEnabled,
+        ),
         subjects ? { enabled: true, subjects } : undefined,
+        {
+          enabled: Boolean(config.examsEnabled),
+          maxToolCalls: config.maxToolCalls,
+          maxToolRounds: config.maxToolRounds,
+        },
       );
     } catch {
       logger.error('chat.runtime.failed', {

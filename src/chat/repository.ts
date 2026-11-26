@@ -28,6 +28,8 @@ export interface RequestRecord {
   result?: ChatResult;
   errorCode?: string;
   nonReplayable?: boolean;
+  /** Owner-scoped routing metadata only; never contains exam schedule rows. */
+  examLookup?: { semester?: string; expiresAt: Date };
 }
 export interface ConversationStore {
   create(hash: string, ownerAccountId?: string): Promise<Conversation>;
@@ -158,6 +160,7 @@ export class MongoConversationStore implements ConversationStore {
           status: 'completed',
           retainInContext: record.retainInContext,
           ...(record.nonReplayable ? { nonReplayable: true } : {}),
+          ...(record.examLookup ? { examLookup: record.examLookup } : {}),
         },
       },
     );

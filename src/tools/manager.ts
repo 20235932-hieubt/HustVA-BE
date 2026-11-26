@@ -119,6 +119,12 @@ export class ToolManager {
     }));
   }
 
+  async isEnabled(id: string): Promise<boolean> {
+    await this.ready;
+    const tool = findTool(id);
+    return Boolean(tool && (this.settings[id] ?? this.defaults(tool)).enabled);
+  }
+
   async update(id: string, input: unknown) {
     await this.ready;
     const tool = findTool(id);
