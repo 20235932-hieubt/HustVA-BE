@@ -9,6 +9,7 @@ import type { ExamSemesterSelection } from './exam-semester.js';
 import { resolveExamSemester, type ToolBudget } from './exam-semester.js';
 import { renderExams } from './exams.js';
 import { authorizeStudentData } from '../auth/tool-access.js';
+import type { ResearchRequest } from './research-lookup.js';
 
 export interface ChatTools {
   isEnabled?(id: string): Promise<boolean>;
@@ -32,6 +33,7 @@ export interface ToolPlan {
   /** Resolved locally, never forwarded to upstream or model. */
   studentId?: string;
   upcomingExams?: boolean;
+  research?: ResearchRequest;
 }
 
 export const profileFields = [

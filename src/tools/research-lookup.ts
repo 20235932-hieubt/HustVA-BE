@@ -5,6 +5,7 @@ import type { ToolResult } from './contracts.js';
 import type { ChatTools } from './chat.js';
 import type { ToolBudget } from './exam-semester.js';
 import type { PrivacySession } from '../privacy/session.js';
+import { fold } from '../guardrails/policy.js';
 import {
   researchIdSchema,
   researchLabelSchema,
@@ -32,9 +33,14 @@ export const researchRequestSchema = z
   .strictObject({
     kind: z.enum(['teacher', 'company']),
     keyWord: z.string().trim().min(1).max(200).optional(),
+    unitHint: z.string().trim().min(1).max(200).optional(),
     targetRef: candidateRefSchema.optional(),
   })
-  .refine((value) => Boolean(value.keyWord) !== Boolean(value.targetRef));
+  .refine(
+    (value) =>
+      Boolean(value.keyWord) !== Boolean(value.targetRef) &&
+      (!value.unitHint || (value.kind === 'teacher' && Boolean(value.keyWord))),
+  );
 export type ResearchRequest = z.infer<typeof researchRequestSchema>;
 export const researchStateSchema = z
   .object({
@@ -116,7 +122,8 @@ export type ResearchOutcome =
       target: ResearchLookupState['candidates'][number];
       topics: ResearchTopic[] | null;
     }
-  | { status: 'clarify' | 'unavailable'; reasonCode: string };
+  | { status: 'clarify'; reasonCode: string }
+  | { status: 'unavailable'; reasonCode: string };
 
 export async function resolveResearchLookup(
   input: ResearchRequest,
@@ -159,9 +166,16 @@ export async function resolveResearchLookup(
         status: 'unavailable',
         reasonCode: 'HUST_TOPIC_TARGET_DATA_INVALID',
       };
-    if (!rows.data.length)
+    const matches = request.unitHint
+      ? rows.data.filter(
+          (row) =>
+            row.schoolName &&
+            fold(row.schoolName).includes(fold(request.unitHint!)),
+        )
+      : rows.data;
+    if (!matches.length)
       return { status: 'clarify', reasonCode: 'HUST_TOPIC_TARGET_NOT_FOUND' };
-    const candidates = rows.data.slice(0, 10).map((row) => ({
+    const candidates = matches.slice(0, 10).map((row) => ({
       id: row.id,
       ref: `rt_${randomBytes(16).toString('hex')}`,
       label:
@@ -179,13 +193,13 @@ export async function resolveResearchLookup(
     state = {
       kind: request.kind,
       candidates,
-      total: rows.data.length,
+      total: matches.length,
       establishedAt: now,
       expiresAt: new Date(
         Math.min(now.getTime() + 600_000, conversationExpiry.getTime()),
       ),
     };
-    if (rows.data.length !== 1) return { status: 'selection', state };
+    if (matches.length !== 1) return { status: 'selection', state };
     state.selectedRef = candidates[0].ref;
   } else {
     const existing = validResearchState(previous);
@@ -224,6 +238,8 @@ export async function resolveResearchLookup(
   }
 }
 function unavailable(result: ToolResult): ResearchOutcome {
+  if (result.errorCode === 'HUST_TOPICS_DATA_INVALID')
+    return { status: 'unavailable', reasonCode: 'HUST_TOPICS_DATA_INVALID' };
   return {
     status: 'unavailable',
     reasonCode:

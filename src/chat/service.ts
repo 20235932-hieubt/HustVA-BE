@@ -10,6 +10,12 @@ import { addTraceContext, logger, withTrace } from '../observability/logger.js';
 import { checkInput, hasSecret, normalize } from '../guardrails/policy.js';
 import { isGradeTool } from '../tools/grades.js';
 import { isPrivateTool } from '../tools/student-data.js';
+import { isResearchTool } from '../tools/research-topics.js';
+import {
+  researchReferences,
+  type ResearchLookupStore,
+} from '../tools/research-lookup.js';
+import { runResearchTool } from '../tools/research-chat.js';
 import {
   examSemesterFromContext,
   type ToolBudget,
@@ -91,6 +97,9 @@ export class ChatService {
       | undefined = undefined,
     private readonly examOptions:
       ({ enabled: boolean } & ToolBudget) | undefined = undefined,
+    private readonly researchOptions:
+      | ({ enabled: boolean; store: ResearchLookupStore } & ToolBudget)
+      | undefined = undefined,
   ) {}
   async create(principal?: DemoPrincipal) {
     await principal?.validate();
@@ -406,6 +415,13 @@ export class ChatService {
           );
         }
       }
+      const researchState =
+        !screen.result && this.researchOptions?.enabled
+          ? await this.researchOptions.store.load(id, tokenHash(token))
+          : undefined;
+      const lookupReferences = researchState
+        ? researchReferences(researchState, privacy)
+        : undefined;
       privacy.seal();
       const mergedContext = publicContext({
         ...conversation.context,
@@ -456,11 +472,18 @@ export class ChatService {
                 routingMessage,
                 signal,
                 prepared?.references,
+                lookupReferences,
               ),
               signal,
             )
           : undefined;
       if (toolPlan) record.retainInContext = false;
+      if (isResearchTool(toolPlan?.id ?? '') && !this.researchOptions?.enabled)
+        throw new ChatError(
+          403,
+          'HUST_TOPICS_DISABLED',
+          'Tra cứu đề tài chưa được bật.',
+        );
       // Never answer a personal grade request using retrieval/model-generated numbers.
       const gradeFallback =
         !screen.result &&
@@ -509,37 +532,57 @@ export class ChatService {
         subjectResult ??
         examFallback ??
         gradeFallback ??
-        (toolPlan && this.tools
+        (toolPlan?.research && this.tools && this.researchOptions?.enabled
           ? await abortable(
-              runChatTool(
-                toolPlan,
-                this.tools,
-                signal,
-                principal ? demoToolAccess(principal) : undefined,
-                {
-                  budget: this.examOptions,
-                  onExamSemester: (semester) => {
-                    record.examLookup = {
-                      semester,
-                      expiresAt: new Date(
-                        Math.min(
-                          conversation.expiresAt.getTime(),
-                          Date.now() + 30 * 60_000,
-                        ),
-                      ),
-                    };
-                  },
+              runResearchTool(toolPlan.research, this.tools, signal, {
+                previous: researchState,
+                budget: this.researchOptions,
+                expiresAt: conversation.expiresAt,
+                access: principal ? demoToolAccess(principal) : undefined,
+                save: async (state) => {
+                  signal.throwIfAborted();
+                  await principal?.validate();
+                  await this.researchOptions!.store.save(
+                    id,
+                    tokenHash(token),
+                    runId,
+                    state,
+                  );
                 },
-              ),
+              }),
               signal,
             )
-          : await abortable(
-              this.run(
-                { message: safeMessage, context: mergedContext, history },
+          : toolPlan && this.tools
+            ? await abortable(
+                runChatTool(
+                  toolPlan,
+                  this.tools,
+                  signal,
+                  principal ? demoToolAccess(principal) : undefined,
+                  {
+                    budget: this.examOptions,
+                    onExamSemester: (semester) => {
+                      record.examLookup = {
+                        semester,
+                        expiresAt: new Date(
+                          Math.min(
+                            conversation.expiresAt.getTime(),
+                            Date.now() + 30 * 60_000,
+                          ),
+                        ),
+                      };
+                    },
+                  },
+                ),
                 signal,
-              ),
-              signal,
-            ));
+              )
+            : await abortable(
+                this.run(
+                  { message: safeMessage, context: mergedContext, history },
+                  signal,
+                ),
+                signal,
+              ));
       signal.throwIfAborted();
       if (isPrivateTool(toolPlan?.id ?? '')) await principal?.validate();
       if (toolPlan?.id === 'get_exams' && !record.examLookup)

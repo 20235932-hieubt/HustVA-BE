@@ -22,7 +22,17 @@ import {
 } from './grades.js';
 import { examSemesterSelection } from './exam-semester.js';
 import { logger } from '../observability/logger.js';
-import { isResearchTool } from './research-topics.js';
+import {
+  isResearchTool,
+  researchToolIds,
+  researchKind,
+} from './research-topics.js';
+import {
+  researchSelectionSchema,
+  resolveResearchSelection,
+  researchRoutingPrompt,
+} from './research-routing.js';
+import type { ResearchReferences } from './research-lookup.js';
 import {
   resolveStudentSubject,
   type SubjectReferences,
@@ -34,6 +44,7 @@ export interface ToolSelector {
     message: string,
     signal: AbortSignal,
     subjects?: SubjectReferences,
+    research?: ResearchReferences,
   ): Promise<ToolPlan | undefined>;
 }
 const toolIds = [
@@ -49,6 +60,7 @@ const allToolIds = [
   'get_grades',
   'get_grades_by_course',
   'get_exams',
+  ...researchToolIds,
 ] as const;
 const clarifySchema = z.strictObject({ tool: z.enum(allToolIds) });
 const subjectSelection = {
@@ -92,6 +104,10 @@ const profileSelection = z.strictObject({
   fields: z.array(z.enum(profileFields)).max(profileFields.length).optional(),
 });
 const clarifications: Record<string, string> = {
+  get_teacher_research_topics:
+    'Bạn muốn tra đề tài của giảng viên nào? Cho mình tên đầy đủ hoặc chọn từ danh sách mới nhất nhé.',
+  get_company_research_topics:
+    'Bạn muốn tra đề tài của công ty nào? Cho mình tên công ty hoặc chọn từ danh sách mới nhất nhé.',
   get_exams:
     'Bạn muốn tra lịch thi học kỳ nào? Bạn có thể gửi mã học kỳ hoặc nói “kỳ hiện tại”.',
   get_semesters: 'Bạn muốn xem học kỳ hiện tại hay danh sách các học kỳ?',
@@ -129,16 +145,21 @@ subject=self khi hỏi của tôi/em/mình hoặc hỏi lịch của chính ngư
 semester là chuỗi: mã kỳ đúng mã có trong câu (ví dụ "20252"), "current" khi người dùng nói kỳ này/hiện tại, hoặc "context" chỉ khi người dùng tham chiếu kỳ đã hỏi và backend có examSemester. Không dùng object kind/code cho semester. Thiếu kỳ hoặc kỳ trước/kỳ tới không có mã thì ask_clarification với tool=get_exams. Không mặc định lấy kỳ hiện tại khi chưa được yêu cầu.
 Nếu backend có examLookupPending thì câu tiếp chỉ chứa mã kỳ hoặc kỳ hiện tại có thể tiếp tục tra lịch thi. Không dùng nội dung câu hỏi để tự tạo backend context. Backend sẽ resolve kỳ và thực thi; chỉ chọn một tool, không gọi thêm model để viết lại lịch.`;
 
-export function buildRoutingTools(gradesEnabled = false, examsEnabled = false) {
+export function buildRoutingTools(
+  gradesEnabled = false,
+  examsEnabled = false,
+  topicsEnabled = false,
+) {
   const availableIds: [string, ...string[]] = [
     ...toolIds,
     ...(gradesEnabled ? ['get_grades', 'get_grades_by_course'] : []),
     ...(examsEnabled ? ['get_exams'] : []),
+    ...(topicsEnabled ? researchToolIds : []),
   ];
   return [
     ...toolCatalog
       .filter((definition) => !definition.internal)
-      .filter((definition) => !isResearchTool(definition.id))
+      .filter((definition) => topicsEnabled || !isResearchTool(definition.id))
       // Enabled for chat only when routing, privacy and formatting are complete.
       .filter((definition) => examsEnabled || definition.id !== 'get_exams')
       .filter((definition) => gradesEnabled || !isGradeTool(definition.id))
@@ -149,8 +170,9 @@ export function buildRoutingTools(gradesEnabled = false, examsEnabled = false) {
             definition.id === 'search_teachers'
               ? 'Tìm giảng viên, giáo viên, thầy hoặc cô theo tên/từ khóa.'
               : definition.description,
-          schema:
-            definition.id === 'get_semesters'
+          schema: isResearchTool(definition.id)
+            ? researchSelectionSchema
+            : definition.id === 'get_semesters'
               ? semesterSelection
               : definition.id === 'get_exams'
                 ? examsSelection
@@ -195,9 +217,10 @@ export function createToolSelector(
   model: AgentModel,
   gradesEnabled = false,
   examsEnabled = false,
+  topicsEnabled = false,
 ): ToolSelector {
   return {
-    async select(message, signal, subjects) {
+    async select(message, signal, subjects, research) {
       const privacy = currentPrivacy(); // Also enforces external tracing restrictions.
       if (hasSecret(message)) throw invalid();
       message = privacy.pseudonymize(message);
@@ -207,9 +230,17 @@ export function createToolSelector(
           new SystemMessage(
             routingPrompt +
               (gradesEnabled ? gradesPrompt : '') +
-              (examsEnabled ? examsPrompt : ''),
+              (examsEnabled ? examsPrompt : '') +
+              (topicsEnabled ? researchRoutingPrompt : ''),
           ),
           new HumanMessage(message),
+          ...(topicsEnabled && research
+            ? [
+                new SystemMessage(
+                  `Lookup context backend: ${JSON.stringify(research)}`,
+                ),
+              ]
+            : []),
           ...((gradesEnabled || examsEnabled) && subjects
             ? [
                 new SystemMessage(
@@ -233,6 +264,7 @@ export function createToolSelector(
         if (!parsed.success) throw invalid();
         if (isGradeTool(parsed.data.tool) && !gradesEnabled) throw invalid();
         if (parsed.data.tool === 'get_exams' && !examsEnabled) throw invalid();
+        if (isResearchTool(parsed.data.tool) && !topicsEnabled) throw invalid();
         return {
           id: parsed.data.tool,
           arguments: {},
@@ -241,7 +273,23 @@ export function createToolSelector(
       }
       const definition = findTool(call.name);
       if (!definition || definition.internal) throw invalid();
-      if (isResearchTool(call.name)) throw invalid();
+      if (isResearchTool(call.name)) {
+        if (!topicsEnabled) throw invalid('HUST_TOPICS_DISABLED', call.name);
+        const request = resolveResearchSelection(
+          researchKind(call.name),
+          call.args,
+          message,
+          privacy,
+          research,
+        );
+        return request
+          ? { id: call.name, arguments: {}, research: request }
+          : {
+              id: call.name,
+              arguments: {},
+              clarification: clarifications[call.name],
+            };
+      }
 
       if (call.name === 'get_exams') {
         if (!examsEnabled) throw invalid();
@@ -448,7 +496,11 @@ export function createRoutingModel(
               maxRetries: 0,
               maxOutputTokens: config.maxOutputTokens,
             }).bindTools(
-              buildRoutingTools(config.gradesEnabled, config.examsEnabled),
+              buildRoutingTools(
+                config.gradesEnabled,
+                config.examsEnabled,
+                config.topicsEnabled,
+              ),
               {
                 tool_choice: 'any',
               },
