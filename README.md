@@ -210,7 +210,7 @@ Replay cùng UUID và nội dung gốc tái tạo mapping trong RAM để trả 
 
 Catalog gồm **5 tool dữ liệu dùng chung** và **2 tool điểm cá nhân tắt mặc định**
 từ HUST Partner. Các tool dùng chung không cần MSSV; tool điểm nhận MSSV 8 hoặc
-9 chữ số và chỉ dùng trong môi trường thử được kiểm soát khi chưa có xác thực sinh viên.
+9 chữ số. Chat chỉ cho tài khoản demo tra cứu MSSV đã được người vận hành gắn sẵn.
 
 | Tool                    | Endpoint                    | Tham số                    |
 | ----------------------- | --------------------------- | -------------------------- |
@@ -301,9 +301,11 @@ Cấu hình file hiện phục vụ một tiến trình backend.
 
 Tool đã gỡ không xuất hiện trong registry, không gọi được qua execute và không
 thể bật lại qua PATCH. Settings cũ của chúng bị bỏ qua khi load. Backend khác có
-thể gọi `ToolManager.execute(id, args, signal?)`. Chưa có xác thực sinh viên,
-liên kết tài khoản-MSSV hoặc allowlist MSSV. Management token xác thực người vận hành,
-không xác minh chủ sở hữu MSSV. Chỉ dùng dữ liệu cá nhân của MSSV được ban tổ chức chỉ định.
+thể gọi `ToolManager.execute(id, args, signal?, access?)`. Tool điểm bắt buộc có
+execution context do server tạo: demo principal còn hiệu lực hoặc management
+context sau khi đã xác thực bearer token. Không deserialize context quyền từ body.
+Management token xác thực người vận hành, không xác minh chủ sở hữu MSSV.
+Chỉ dùng dữ liệu cá nhân của MSSV được ban tổ chức chỉ định.
 
 ### Tool tra cứu điểm học tập
 
@@ -333,20 +335,14 @@ Gửi body trên tới `POST /api/v1/tools/<tool-id>/execute` với management b
 Trước đó bật tool bằng `PATCH /api/v1/tools/<tool-id>` với `{"enabled":true}`.
 HTTP client gửi POST, query string và body trống sang HUST đúng hợp đồng Partner.
 
-Để thử qua chat, đặt `CHAT_GRADES_ENABLED=true` và restart backend, đồng thời
-bật từng tool qua management. Không bật cờ này trên public deployment khi chưa
-có xác thực chủ sở hữu. Khi cờ tắt, model không được cung cấp tool điểm và backend
-chặn lời gọi điểm giả; các tool dùng chung hoạt động như trước.
-
-Trong chế độ thử, chatbot có thể nhận MSSV từ câu hiện tại hoặc context của chính
-phiên. Ví dụ khai báo “MSSV của tôi là …”, sau đó hỏi điểm mà không nhập lại MSSV.
-Self identity và đối tượng đang tra cứu được tách riêng; mâu thuẫn hoặc thiếu
-thông tin thì hỏi lại. Không suy dãy số từ tên/email/ngành. Binding tự khai lưu
-ở collection riêng `chat_student_subjects`, TTL tối đa 30 phút từ lúc xác định đối
-tượng và không vượt hạn conversation; không gia hạn chỉ vì đọc. Xóa conversation
-cũng xóa binding. Binding được kiểm tra quyền sở hữu phiên và lease; đây chưa
-phải xác minh quyền sở hữu MSSV. Model chỉ nhận tham chiếu được cấp cho lượt hiện tại,
-backend khôi phục MSSV cục bộ trước khi thực thi.
+Để thử qua chat, bật `CHAT_GRADES_ENABLED=true`, `DEMO_AUTH_ENABLED=true`, cấp tài
+khoản theo hướng dẫn bên dưới và restart backend; bật từng tool qua management.
+Khách chưa đăng nhập vẫn hỏi thông tin công khai được. Tắt auth không mở lại quyền
+tra điểm bằng MSSV tự khai. Self identity lấy từ mapping server của phiên đăng nhập;
+model chỉ nhận tham chiếu giả danh cấp mới cho từng lượt. MSSV khác trong câu hỏi
+bị chặn trước routing/dispatch, không âm thầm thay bằng MSSV của người đang đăng nhập.
+Context tự khai chỉ hỗ trợ hội thoại, không xác nhận quyền sở hữu hoặc ghi đè mapping.
+Nhận diện ý định hiện vẫn có guardrail/rule; chưa refactor toàn bộ ngữ nghĩa sang LLM.
 
 Output management và chat chỉ giữ các trường điểm được phép. Chat hiển thị theo
 học kỳ và lớp, tối đa 30 hàng cùng giới hạn độ dài, nêu rõ khi chưa hiển thị hết.
@@ -367,6 +363,74 @@ local. Để rollback: tắt hai tool qua management và đặt lại `CHAT_GRAD
 Các bài kiểm thử tự động và script kiểm thử API thật đã được chuyển sang
 `../kiem-thu/be`, giữ nguyên nội dung để tham khảo hoặc khôi phục khi cần.
 Các lệnh `test:*` tương ứng đã được bỏ khỏi `package.json`.
+
+## Đăng nhập demo và bảo vệ điểm cá nhân
+
+Đây là tài khoản demo do người vận hành cấp, không phải đăng nhập Microsoft/HUST.
+Chỉ cấu hình mapping tới MSSV được ban tổ chức cho phép. Không có đăng ký công khai
+hoặc mật khẩu mặc định. Chạy backend một tiến trình trong giai đoạn demo.
+
+1. Giữ `DEMO_AUTH_ENABLED=false` trong lúc triển khai.
+2. Build backend rồi chạy CLI trong thư mục `be`:
+
+   ```powershell
+   pnpm.cmd build
+   node dist/auth/create-demo-account.js
+   ```
+
+   CLI đọc `.env`, hỏi username/MSSV được phép và nhận mật khẩu ẩn (tối thiểu 12 ký
+   tự). Không truyền mật khẩu qua command line. Tài khoản được ghi vào
+   `.local/demo-auth/accounts.json`, hoặc `DEMO_ACCOUNTS_FILE`. File này phải ở
+   ngoài Git; giới hạn quyền đọc file cho người vận hành/backend.
+   Record có `accountId`, `username`, `passwordHash` scrypt-v1, `studentId` dạng
+   string 8/9 chữ số, `enabled`, `displayName` tùy chọn. Username trim/lowercase,
+   accountId/username không được trùng. Mapping cùng MSSV chỉ dùng khi được cấp rõ.
+
+3. Đặt `DEMO_AUTH_ENABLED=true`, `CHAT_GRADES_ENABLED=true`; giữ
+   `DEMO_SESSION_TTL_MS=3600000` (hỗ trợ 1 phút–24 giờ). Cấu hình MongoDB và HUST,
+   bật tool điểm qua management rồi restart.
+4. Mở trang chat trực tiếp, đăng nhập tài khoản demo và hỏi “xem điểm của tôi”.
+   `API_ORIGIN=http://localhost:4000`, `WEB_ORIGIN=http://localhost:3000` và URL
+   frontend phải thống nhất hostname `localhost`; không trộn `127.0.0.1`.
+
+| Endpoint                        | Hợp đồng                                                                    |
+| ------------------------------- | --------------------------------------------------------------------------- |
+| `POST /api/v1/auth/demo/login`  | JSON strict `{username,password}`, trả accountId/displayName/expiresAt/mode |
+| `GET /api/v1/auth/demo/me`      | Thông tin phiên tối thiểu hoặc 401                                          |
+| `POST /api/v1/auth/demo/logout` | JSON `{}`, revoke session và xóa cookie, 204; gọi lại an toàn               |
+
+Mutation auth bắt buộc Origin khớp WEB_ORIGIN/API_ORIGIN và Content-Type JSON.
+CORS credentials chỉ cho WEB_ORIGIN cụ thể. Cookie `hustva_demo` là HttpOnly,
+host-only, SameSite=Lax, Path=/api/v1; Secure tự bật khi API_ORIGIN dùng HTTPS.
+Client không nhận auth token/MSSV/passwordHash trong JSON. Login giới hạn theo
+IP và username với bucket có TTL và giới hạn số lượng; lỗi sai username/password
+dùng cùng thông báo. Rate limit hiện theo tiến trình.
+
+Mongo collection `demo_auth_sessions` chỉ giữ hash token, accountId, config
+version và thời điểm tạo/hết hạn; có TTL index và kiểm tra expiry trên từng lần
+xác thực. Logout thu hồi ngay phiên tương ứng. Sửa mapping/password/enabled
+trong file rồi restart để nạp lại; mọi phiên cũ bị vô hiệu sau restart. Đổi
+mapping không tự chuyển hội thoại sang tài khoản khác. Nhiều instance cần cơ chế
+version/limiter dùng chung trước khi triển khai; bản này dành cho demo một instance.
+
+Conversation mới sau login có ownerAccountId. Đọc history/request, gửi message,
+replay và delete cần cả capability bearer đúng lẫn owner đúng. Hội thoại guest cũ
+không tự nhận vào tài khoản mới; hãy tạo hội thoại mới sau đăng nhập. Giữ token
+hội thoại cũng không vượt được owner check. Có thể giữ collection/context cũ;
+không migration tự gán chủ sở hữu cho dữ liệu legacy.
+
+Tool điểm kiểm tra mapping và phiên ngay trước dispatch, sau khi upstream trả về
+và trước phản hồi chat. Logout/expiry trong khi HUST đang chạy loại bỏ kết quả
+cá nhân; không thể thu hồi lời gọi đã tới HUST. Management giữ quyền vận hành
+riêng, chỉ adapter đã kiểm tra management bearer mới tạo trusted context.
+Không đưa principal/role/source/verified vào JSON để cấp quyền.
+
+Rollback an toàn: tắt `CHAT_GRADES_ENABLED` và `DEMO_AUTH_ENABLED`, restart, giữ
+gate tool mới; không rollback sang bản cho phép tra điểm bằng MSSV tự khai.
+Không commit file tài khoản, `.env`, test, fixture hoặc kết quả test. Test local ở
+`../kiem-thu/be/demo-auth`, `../kiem-thu/be/grades`, `../kiem-thu/be/gemini`;
+build lại `dist` trước khi chạy. Kiểm thử bằng dữ liệu giả lập không chứng minh
+HUST thật, Microsoft SSO hoặc hạ tầng Mongo đang hoạt động.
 
 ## Trace và kiểm tra code
 
