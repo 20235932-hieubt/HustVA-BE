@@ -26,19 +26,14 @@ export function providerMessages(messages: BaseMessage[]): BaseMessage[] {
   for (const message of messages) {
     const kind = message.getType();
     if (kind === 'system') continue;
-    // Gemini returns tool-call turns with content parts; that content is dropped below, so only
-    // the remaining messages must be plain text.
-    const toolCallTurn =
-      kind === 'ai' && ((message as AIMessage).tool_calls ?? []).length > 0;
-    if (typeof message.content !== 'string' && !toolCallTurn)
+    if (typeof message.content !== 'string')
       throw new ChatError(
         400,
         'PRIVACY_CONTENT_UNSUPPORTED',
         'Chưa hỗ trợ dữ liệu đa phương tiện trong chat.',
       );
-    const content = typeof message.content === 'string' ? message.content : '';
     if (kind === 'human') {
-      let text = content;
+      let text = message.content;
       let context = {};
       try {
         const parsed = JSON.parse(text);
@@ -58,7 +53,7 @@ export function providerMessages(messages: BaseMessage[]): BaseMessage[] {
       const calls = (message as AIMessage).tool_calls ?? [];
       if (!calls.length) {
         // Apply the PII filter again to historical answers before forwarding.
-        output.push(new AIMessage(privacy.pseudonymize(content)));
+        output.push(new AIMessage(privacy.pseudonymize(message.content)));
         continue;
       }
       output.push(
@@ -113,7 +108,7 @@ export function providerMessages(messages: BaseMessage[]): BaseMessage[] {
         );
       let result: unknown;
       try {
-        result = JSON.parse(content);
+        result = JSON.parse(message.content);
       } catch {
         /* No raw output or error is forwarded. */
       }

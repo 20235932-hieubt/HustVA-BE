@@ -1,4 +1,4 @@
-# Tested with Python 3.14. The Dockerfile installs the CPU build of torch before these.
+# Tested with Python 3.14. Install torch first (CPU or CUDA build), see README.md.
 # transformers must stay on 4.x: the model's remote code does not run on transformers 5.
 transformers==4.57.6
 sentence-transformers==5.7.0
