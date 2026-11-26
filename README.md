@@ -16,6 +16,48 @@ Nếu chưa có pnpm trên PATH, thay `pnpm.cmd` bằng `npm.cmd exec --yes --pa
 
 API mặc định chạy tại `http://localhost:4000`, bind `127.0.0.1`. Kiểm tra bằng `GET /api/v1/health`. Tham khảo các biến cấu hình trong [.env.example](.env.example), restart server sau khi sửa `.env`.
 
+## Xoay vòng key Gemini
+
+Backend hỗ trợ `GEMINI_API_KEYS` là danh sách key phân cách bằng dấu phẩy
+(tối đa 20 key, tự loại trùng). Nếu danh sách trống, dùng `GEMINI_API_KEY` cũ.
+Danh sách không trống thay thế key đơn; không tự thêm key đơn vào danh sách.
+Chỉ đặt key thật trong `.env` local hoặc secret manager; không gửi key vào chat,
+frontend, log hoặc repository. Restart backend sau khi thay đổi key.
+
+```dotenv
+# Thay các placeholder bằng key thật của bạn khi cấu hình local.
+GEMINI_API_KEYS=key_1,key_2,key_3
+GEMINI_MAX_REQUESTS_PER_MINUTE=15
+GEMINI_KEY_COOLDOWN_MS=60000
+GEMINI_MAX_ATTEMPTS=2
+```
+
+Routing và agent dùng chung pool theo runtime config, chọn key round-robin và
+cache client riêng theo key. Tổng lượt bắt đầu gọi tối đa 15 trong bất kỳ 60 giây
+liên tiếp trên một process; có thể cấu hình thấp hơn, không nhân giới hạn theo
+số key. Lần lỗi và failover đều tính vào ngân sách. SDK maxRetries=0 để tránh
+retry ẩn ngoài bộ đếm.
+
+- `401`/`403` hoặc lỗi có reason `API_KEY_INVALID`: loại key khỏi pool đến khi
+  sửa cấu hình và restart; có thể chuyển key khác trong giới hạn attempts.
+- `429`: tạm dừng cả pool ít nhất GEMINI_KEY_COOLDOWN_MS, tôn trọng Retry-After
+  dài hơn nếu có; trả GEMINI_RATE_LIMITED, không thử tiếp các key khác ngay.
+- `408`/`500`/`502`/`503`/`504`: cooldown key, backoff có jitter rồi thử key khác
+  nếu còn key khả dụng và còn ngân sách. Không thử lại cùng key trong một lượt.
+- Lỗi input `400` thông thường hoặc lỗi không xác định: không xoay/retry tự động,
+  trả lỗi đã làm sạch. Abort dừng các lần thử tiếp theo.
+
+Google áp dụng quota theo project, không theo key. Nhiều key cùng project không
+tăng RPM/TPM/RPD. Giới hạn local chỉ kiểm soát RPM, không thay thế quota provider.
+Pool/budget/cooldown hiện nằm trong RAM; nhiều replica hoặc restart không chia sẻ
+trạng thái. Cần quota store tập trung trước khi triển khai nhiều replica.
+Không dùng cơ chế này để tăng lượt khi project đã hết quota.
+
+Tham khảo [Google rate limits](https://ai.google.dev/gemini-api/docs/rate-limits)
+và [retry strategy](https://ai.google.dev/gemini-api/docs/troubleshooting).
+Test offline chỉ giữ local: build backend rồi từ workspace chạy
+`node kiem-thu/be/gemini/run-tests.mjs`; không commit/push test hoặc runner.
+
 ## Cấu hình endpoint khi deploy
 
 Các URL và địa chỉ listen được đọc từ `.env` hoặc biến môi trường của hosting:
