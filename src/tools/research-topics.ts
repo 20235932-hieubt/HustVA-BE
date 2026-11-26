@@ -49,6 +49,7 @@ const prose = (max: number) =>
     .refine((value) => !hasSecret(value))
     .transform(sourceText);
 const label = prose(500);
+export const researchLabelSchema = label;
 const scalar = z.union([label, z.number().finite()]).nullish();
 const topicShape = {
   title: label.refine((value) => Boolean(value)),
