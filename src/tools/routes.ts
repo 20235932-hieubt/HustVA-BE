@@ -1,3 +1,4 @@
+import { managementToolAccess } from '../auth/tool-access.js';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import express from 'express';
 import { z } from 'zod';
@@ -98,6 +99,7 @@ export function createToolsRouter(
         req.params.id,
         parsed.data.arguments,
         AbortSignal.any([disconnected.signal, toolsShutdown.signal]),
+        managementToolAccess(),
       );
       if (!res.destroyed) res.status(httpStatus[result.status]).json(result);
     } finally {

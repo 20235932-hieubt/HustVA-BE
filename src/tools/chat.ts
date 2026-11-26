@@ -1,3 +1,4 @@
+import type { ToolAccess } from '../auth/tool-access.js';
 import { z } from 'zod';
 import { reply, type ChatResult } from '../chat/contracts.js';
 
@@ -10,6 +11,7 @@ export interface ChatTools {
     id: string,
     input: unknown,
     signal?: AbortSignal,
+    access?: ToolAccess,
   ): Promise<ToolResult>;
 }
 export interface ToolPlan {
@@ -144,6 +146,7 @@ export async function runChatTool(
   plan: ToolPlan,
   tools: ChatTools,
   signal: AbortSignal,
+  access?: ToolAccess,
 ): Promise<ChatResult> {
   const response = (
     status: ChatResult['status'],
@@ -163,7 +166,7 @@ export async function runChatTool(
   signal.throwIfAborted();
   let result: ToolResult;
   try {
-    result = await tools.execute(plan.id, plan.arguments, signal);
+    result = await tools.execute(plan.id, plan.arguments, signal, access);
   } catch {
     signal.throwIfAborted();
     return response(

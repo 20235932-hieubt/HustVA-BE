@@ -1,3 +1,5 @@
+import { authorizeGrade, type ToolAccess } from '../auth/tool-access.js';
+import { ChatError } from '../chat/contracts.js';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
@@ -136,6 +138,7 @@ export class ToolManager {
     id: string,
     input: unknown,
     callerSignal?: AbortSignal,
+    access?: ToolAccess,
   ): Promise<ToolResult> {
     await this.ready;
     const tool = findTool(id);
@@ -151,6 +154,16 @@ export class ToolManager {
     if (!parsed.success)
       return base('invalid_arguments', 'TOOL_ARGUMENTS_INVALID');
     const args = { ...parsed.data };
+    if (isGradeTool(id)) {
+      try {
+        await authorizeGrade(args.studentId, access);
+      } catch (error) {
+        return base(
+          'error',
+          error instanceof ChatError ? error.code : 'DEMO_AUTH_REQUIRED',
+        );
+      }
+    }
     if (isGradeTool(id) && typeof args.courseId === 'string')
       args.courseId = args.courseId.toUpperCase();
     const settings = { ...(this.settings[id] ?? this.defaults(tool)) };
@@ -182,6 +195,7 @@ export class ToolManager {
         settings.retries,
         signal,
       );
+      if (isGradeTool(id)) await authorizeGrade(args.studentId, access);
       const data = isGradeTool(id) ? normalizeGrades(payload) : payload;
       result = {
         ...base(
@@ -200,7 +214,7 @@ export class ToolManager {
           )
         : base(
             'error',
-            error instanceof UpstreamError
+            error instanceof UpstreamError || error instanceof ChatError
               ? error.code
               : 'TOOL_EXECUTION_FAILED',
           );
