@@ -350,10 +350,10 @@ Gửi body trên tới `POST /api/v1/tools/<tool-id>/execute` với management b
 Trước đó bật tool bằng `PATCH /api/v1/tools/<tool-id>` với `{"enabled":true}`.
 HTTP client gửi POST, query string và body trống sang HUST đúng hợp đồng Partner.
 
-Để thử qua chat, bật `CHAT_GRADES_ENABLED=true`, `DEMO_AUTH_ENABLED=true`, cấp tài
+Để thử qua chat, bật `CHAT_GRADES_ENABLED=true`, cấp tài
 khoản theo hướng dẫn bên dưới và restart backend; bật từng tool qua management.
-Khách chưa đăng nhập vẫn hỏi thông tin công khai được. Tắt auth không mở lại quyền
-tra điểm bằng MSSV tự khai. Self identity lấy từ mapping server của phiên đăng nhập;
+Khách chưa đăng nhập vẫn hỏi thông tin công khai được. Không cho tra điểm bằng
+MSSV tự khai. Self identity lấy từ mapping server của phiên đăng nhập;
 model chỉ nhận tham chiếu giả danh cấp mới cho từng lượt. MSSV khác trong câu hỏi
 bị chặn trước routing/dispatch, không âm thầm thay bằng MSSV của người đang đăng nhập.
 Context tự khai chỉ hỗ trợ hội thoại, không xác nhận quyền sở hữu hoặc ghi đè mapping.
@@ -385,7 +385,8 @@ Các lệnh `test:*` tương ứng đã được bỏ khỏi `package.json`.
 Chỉ cấu hình mapping tới MSSV được ban tổ chức cho phép. Không có đăng ký công khai
 hoặc mật khẩu mặc định. Chạy backend một tiến trình trong giai đoạn demo.
 
-1. Giữ `DEMO_AUTH_ENABLED=false` trong lúc triển khai.
+1. Đăng nhập demo luôn bật, không cần biến `DEMO_AUTH_ENABLED`. Cần file tài khoản
+   hợp lệ và MongoDB hoạt động để tạo phiên; cấu hình thiếu vẫn trả lỗi an toàn.
 2. Build backend rồi chạy CLI trong thư mục `be`:
 
    ```powershell
@@ -401,7 +402,7 @@ hoặc mật khẩu mặc định. Chạy backend một tiến trình trong giai
    string 8/9 chữ số, `enabled`, `displayName` tùy chọn. Username trim/lowercase,
    accountId/username không được trùng. Mapping cùng MSSV chỉ dùng khi được cấp rõ.
 
-3. Đặt `DEMO_AUTH_ENABLED=true`, `CHAT_GRADES_ENABLED=true`; giữ
+3. Đặt `CHAT_GRADES_ENABLED=true`; giữ
    `DEMO_SESSION_TTL_MS=3600000` (hỗ trợ 1 phút–24 giờ). Cấu hình MongoDB và HUST,
    bật tool điểm qua management rồi restart.
 4. Mở trang chat trực tiếp, đăng nhập tài khoản demo và hỏi “xem điểm của tôi”.
@@ -441,7 +442,7 @@ cá nhân; không thể thu hồi lời gọi đã tới HUST. Management giữ 
 riêng, chỉ adapter đã kiểm tra management bearer mới tạo trusted context.
 Không đưa principal/role/source/verified vào JSON để cấp quyền.
 
-Rollback an toàn: tắt `CHAT_GRADES_ENABLED` và `DEMO_AUTH_ENABLED`, restart, giữ
+Rollback tra cứu điểm: tắt `CHAT_GRADES_ENABLED`, restart, giữ
 gate tool mới; không rollback sang bản cho phép tra điểm bằng MSSV tự khai.
 Không commit file tài khoản, `.env`, test, fixture hoặc kết quả test. Test local ở
 `../kiem-thu/be/demo-auth`, `../kiem-thu/be/grades`, `../kiem-thu/be/gemini`;
@@ -644,6 +645,14 @@ hoạt động lại, snapshot mới bị bỏ qua. Không cần migration hoặ
 mới. Test/runner/probe chỉ giữ local tại `../kiem-thu/be/multi-turn-clarification/`,
 không commit và không tạo CI phụ thuộc file ngoài repo. Build backend trước
 khi chạy runner local. Báo cáo kết quả ở workspace `output/reports/`.
+
+## Đánh giá chất lượng bằng Ragas
+
+Chạy service đánh giá Ragas độc lập sau khi sửa code: `pnpm.cmd eval:ragas`.
+Nếu chưa có pnpm trong PATH, chạy `node services/ragas/run.mjs` từ thư mục `be`.
+Kiểm tra dataset không gọi model: `pnpm.cmd eval:ragas --check --limit 0`.
+Xem [hướng dẫn service Ragas](services/ragas/README.md) về lấy response từ
+pipeline HustVA, chấm lại JSONL, quota và báo cáo HTML/CSV/TXT local.
 
 ## Mã nguồn chính
 
