@@ -1,8 +1,19 @@
 # -*- coding: utf-8 -*-
-"""Sinh eval/golden-v1.json từ bản nháp bên dưới và kiểm tra tự động:
- 1. mỗi cụm trong `answers` phải có nguyên văn trong văn bản nguồn (chuẩn hóa như retrieval.ts)
+"""Sinh bộ test Ragas (eval/ragas_testset.jsonl) từ bản nháp Q bên dưới, có kiểm tra tự động:
+ 1. mỗi cụm trích trong Q phải có nguyên văn trong văn bản nguồn của kho crawl
  2. câu no_answer: các từ khóa trong `absent` không được xuất hiện ở BẤT KỲ văn bản nào
-Chạy (từ HustVA-BE): python -X utf8 eval/build_golden.py .local/crawler eval/golden-v1.json
+ 3. reference_contexts = đoạn văn bản gốc cắt quanh cụm trích
+Có lỗi thì không ghi file.
+
+Mỗi dòng JSONL là một SingleTurnSample của Ragas:
+  user_input, reference, reference_contexts, rubrics  (có sẵn)
+  response, retrieved_contexts                         (điền khi chạy bot)
+  id, type, expected_behavior, topic                   (Ragas bỏ qua; dùng để tách điểm theo loại câu)
+Đọc: ragas.EvaluationDataset.from_jsonl('eval/ragas_testset.jsonl'). Câu bẫy (refuse/correct_premise/
+clarify/answer_with_caveat) chấm bằng RubricsScore/InstanceRubrics với cột rubrics.
+
+Chạy (từ HustVA-BE, Python >= 3.9, không cần thư viện ngoài):
+  python -X utf8 eval/build_golden.py .local/crawler eval/ragas_testset.jsonl
 """
 import json, re, sys, unicodedata, collections
 
@@ -332,6 +343,65 @@ def norm(t):
     return unicodedata.normalize('NFC', re.sub(r'\s+', '', t)).lower()
 
 
+def context_around(text, phrase, before=400, after=400):
+    """Cắt đoạn văn bản gốc quanh `phrase` (so khớp kiểu norm) để làm reference_contexts cho Ragas."""
+    text = unicodedata.normalize('NFC', text)
+    keep = [i for i, ch in enumerate(text) if not ch.isspace()]  # vị trí gốc của từng ký tự không trắng
+    flat = ''.join(text[i] for i in keep).lower()
+    at = flat.find(norm(phrase))
+    if at < 0:
+        return None
+    start, end = keep[at], keep[at + len(norm(phrase)) - 1] + 1
+    lo, hi = max(0, start - before), min(len(text), end + after)
+    lo = text.rfind('\n', 0, lo) + 1 if text.rfind('\n', 0, lo) >= 0 else lo  # cắt ở đầu dòng
+    nl = text.find('\n', hi)
+    hi = nl if nl >= 0 else len(text)
+    return re.sub(r'[ \t]+', ' ', text[lo:hi]).strip()
+
+
+# Tiêu chí chấm theo hành vi mong đợi (dùng cho RubricsScore / InstanceRubrics của Ragas).
+RUBRICS = {
+    'answer': {
+        'score0_description': 'Câu trả lời sai, thiếu dữ kiện cốt lõi so với reference, hoặc từ chối dù tài liệu có đáp án.',
+        'score1_description': 'Câu trả lời nêu đúng các dữ kiện cốt lõi trong reference, không bịa thêm thông tin.',
+    },
+    'correct_premise': {
+        'score0_description': 'Chấp nhận giả định sai trong câu hỏi và trả lời theo giả định đó.',
+        'score1_description': 'Chỉ ra giả định trong câu hỏi là sai và nêu đúng thông tin theo reference.',
+    },
+    'refuse': {
+        'score0_description': 'Đưa ra con số, quy định hoặc hướng dẫn cụ thể không có trong tài liệu (bịa).',
+        'score1_description': 'Nói rõ tài liệu không có thông tin này (có thể gợi ý nơi hỏi thêm), không bịa nội dung.',
+    },
+    'clarify': {
+        'score0_description': 'Trả lời bằng một con số hoặc một trường hợp duy nhất mà không hỏi lại hay nêu các trường hợp.',
+        'score1_description': 'Hỏi lại thông tin còn thiếu, hoặc liệt kê đủ các trường hợp như reference.',
+    },
+    'answer_with_caveat': {
+        'score0_description': 'Chỉ nêu thông tin từ văn bản cũ/một nguồn mâu thuẫn mà không lưu ý, hoặc nêu sai.',
+        'score1_description': 'Nêu thông tin theo văn bản đang hiệu lực/nguồn ưu tiên như reference, có lưu ý về phiên bản hoặc nguồn khác.',
+    },
+}
+
+
+def to_ragas(questions, docs):
+    """Một dòng JSONL / câu theo schema SingleTurnSample của Ragas (retrieved_contexts, response điền khi chạy bot)."""
+    rows = []
+    for q in questions:
+        contexts = []
+        for phrase, src in zip(q['answers'], q['_answer_docs']):
+            ctx = context_around(docs[src]['text'], phrase)
+            if ctx and not any(ctx in c or c in ctx for c in contexts):
+                contexts.append(ctx)
+        rows.append({
+            'user_input': q['question'],
+            'reference': q['reference'],
+            'reference_contexts': contexts,
+            'rubrics': RUBRICS[q['expected_behavior']],
+        })
+    return rows
+
+
 def load_corpus(path):
     """Đọc thẳng kho crawl (.local/crawler: latest/<doc>.json -> versions/<doc>/<version>.json)."""
     import glob, os
@@ -353,43 +423,42 @@ def main(corpus_path, out_path):
     if dup:
         errors.append(f'trùng id: {dup}')
     for (qid, typ, beh, topic, question, ans, ref, note, absent) in Q:
-        sources, answers = [], []
+        answers, answer_docs = [], []
         for key, phrase in ans:
             doc_id = DOCS[key]
             if norm(phrase) not in normed[doc_id]:
                 errors.append(f'{qid}: KHÔNG thấy nguyên văn trong {key}: {phrase!r}')
-            hits = sum(1 for t in normed.values() if norm(phrase) in t)
             answers.append(phrase)
-            if doc_id not in [s['documentId'] for s in sources]:
-                sources.append({'documentId': doc_id, 'url': docs[doc_id]['url']})
+            answer_docs.append(doc_id)
         if typ == 'no_answer':
             for pat in absent:
                 found = [docs[i]['title'][:50] for i, t in docs.items() if pat.lower() in t['text'].lower()]
                 if found:
                     errors.append(f'{qid}: từ khóa {pat!r} lại CÓ trong {found[:3]}')
         out.append({
-            'id': qid, 'question': question, 'type': typ, 'expected_behavior': beh,
-            'topic': topic, 'answers': answers, 'reference': ref, 'sources': sources, 'note': note,
+            'id': qid, 'question': question, 'type': typ, 'expected_behavior': beh, 'topic': topic,
+            'answers': answers, 'reference': ref, '_answer_docs': answer_docs,
         })
+    rows = []
+    for q, row in zip(out, to_ragas(out, docs)):
+        if q['answers'] and not row['reference_contexts']:
+            errors.append(f"{q['id']}: không cắt được reference_contexts")
+        # id/type/expected_behavior/topic: Ragas bỏ qua, dùng để tách điểm theo loại câu.
+        rows.append({'id': q['id'], 'type': q['type'], 'expected_behavior': q['expected_behavior'],
+                     'topic': q['topic'], **row})
+
     counts = collections.Counter(q['type'] for q in out)
-    golden = {
-        'version': 'v1-draft',
-        'createdAt': '2026-11-26',
-        'description': (
-            'Bộ câu hỏi kiểm thử sinh từ tài liệu đã crawl. answers: cụm trích nguyên văn (so khớp bỏ khoảng trắng, '
-            'không phân biệt hoa thường) dùng chấm retrieval; reference: đáp án chuẩn ngắn dùng chấm câu trả lời; '
-            'expected_behavior: answer | correct_premise | refuse | clarify | answer_with_caveat. '
-            'Câu no_answer/ambiguous có answers rỗng, phải loại khỏi phép tính Hit@k.'
-        ),
-        'stats': dict(counts),
-        'questions': out,
-    }
-    json.dump(golden, open(out_path, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
     print('Tổng:', len(out), dict(counts))
-    print('Lỗi:' if errors else 'Không có lỗi kiểm tra.')
-    for e in errors:
-        print(' -', e)
-    return 1 if errors else 0
+    if errors:
+        print('Lỗi (không ghi file):')
+        for e in errors:
+            print(' -', e)
+        return 1
+    with open(out_path, 'w', encoding='utf-8', newline='\n') as f:
+        for row in rows:
+            f.write(json.dumps(row, ensure_ascii=False) + '\n')
+    print('Không có lỗi kiểm tra. Đã ghi:', out_path)
+    return 0
 
 
 if __name__ == '__main__':
