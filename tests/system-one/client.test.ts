@@ -84,13 +84,23 @@ function setup(responder: Responder, overrides: Partial<SystemOneConfig> = {}) {
   return { client, calls, logs };
 }
 
-/** Resolves only when the request signal aborts, like a hung server. */
+/**
+ * Rejects only when the request signal aborts, like a hung server. The
+ * interval stands in for the open socket: AbortSignal.timeout() is unref'd,
+ * so without it Node 22 sees an empty event loop and cancels the test.
+ */
 function hang(call: Call): Promise<Response> {
   return new Promise((_resolve, reject) => {
     const signal = call.init.signal as AbortSignal;
-    signal.addEventListener('abort', () => reject(signal.reason), {
-      once: true,
-    });
+    const socket = setInterval(() => undefined, 1_000);
+    signal.addEventListener(
+      'abort',
+      () => {
+        clearInterval(socket);
+        reject(signal.reason);
+      },
+      { once: true },
+    );
   });
 }
 
