@@ -10,6 +10,7 @@ import { resolveExamSemester, type ToolBudget } from './exam-semester.js';
 import { renderExams } from './exams.js';
 import { authorizeStudentData } from '../auth/tool-access.js';
 import type { ResearchRequest } from './research-lookup.js';
+import type { PendingToolRequest } from './pending-request.js';
 
 export interface ChatTools {
   isEnabled?(id: string): Promise<boolean>;
@@ -34,6 +35,8 @@ export interface ToolPlan {
   studentId?: string;
   upcomingExams?: boolean;
   research?: ResearchRequest;
+  /** Internal continuation snapshot, never an upstream argument. */
+  pendingRequest?: PendingToolRequest;
 }
 
 export const profileFields = [

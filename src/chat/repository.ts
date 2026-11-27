@@ -1,6 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { MongoServerError, type Db } from 'mongodb';
 import type { ChatResult, StudentContext } from './contracts.js';
+import {
+  validPending,
+  type PendingToolRequest,
+} from '../tools/pending-request.js';
 
 export const tokenHash = (token: string) =>
   createHash('sha256').update(token).digest('hex');
@@ -30,6 +34,9 @@ export interface RequestRecord {
   nonReplayable?: boolean;
   /** Owner-scoped routing metadata only; never contains exam schedule rows. */
   examLookup?: { semester?: string; expiresAt: Date };
+  /** Internal snapshot; null is a clear marker. Never returned by publicRecord. */
+  pendingTool?: PendingToolRequest | null;
+  researchContextAllowed?: boolean;
 }
 export interface ConversationStore {
   create(hash: string, ownerAccountId?: string): Promise<Conversation>;
@@ -56,6 +63,8 @@ export interface ConversationStore {
     contextOnly?: boolean,
   ): Promise<RequestRecord[]>;
   remove(id: string): Promise<void>;
+  loadPending?(id: string): Promise<PendingToolRequest | undefined>;
+  researchContextAllowed?(id: string): Promise<boolean>;
 }
 
 export class MongoConversationStore implements ConversationStore {
@@ -165,6 +174,12 @@ export class MongoConversationStore implements ConversationStore {
           retainInContext: record.retainInContext,
           ...(record.nonReplayable ? { nonReplayable: true } : {}),
           ...(record.examLookup ? { examLookup: record.examLookup } : {}),
+          ...(record.pendingTool !== undefined
+            ? {
+                pendingTool: record.pendingTool,
+                researchContextAllowed: record.researchContextAllowed ?? false,
+              }
+            : {}),
         },
       },
     );
@@ -175,6 +190,35 @@ export class MongoConversationStore implements ConversationStore {
       { _id: record._id, status: 'pending', runId: record.runId },
       { $set: { status: 'failed', errorCode: code } },
     );
+  }
+  async loadPending(id: string) {
+    // Caller has checked owner and holds the conversation lease. A clear/expired
+    // latest snapshot must never fall back to an older active request.
+    const record = await this.requests.findOne(
+      {
+        conversationId: id,
+        status: 'completed',
+        pendingTool: { $exists: true },
+        expiresAt: { $gt: new Date() },
+      },
+      { sort: { createdAt: -1, _id: -1 }, projection: { pendingTool: 1 } },
+    );
+    return validPending(record?.pendingTool);
+  }
+  async researchContextAllowed(id: string) {
+    const record = await this.requests.findOne(
+      {
+        conversationId: id,
+        status: 'completed',
+        pendingTool: { $exists: true },
+        expiresAt: { $gt: new Date() },
+      },
+      {
+        sort: { createdAt: -1, _id: -1 },
+        projection: { researchContextAllowed: 1 },
+      },
+    );
+    return record?.researchContextAllowed === true;
   }
   list(id: string, limit: number, offset: number, contextOnly = false) {
     return this.requests
