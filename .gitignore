@@ -7,6 +7,8 @@ node_modules/
 dist/
 build/
 coverage/
+__pycache__/
+services/ragas/.venv/
 *.tsbuildinfo
 *.log
 .DS_Store

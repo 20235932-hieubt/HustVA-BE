@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "db:check": "tsx src/db/cli.ts check",
     "db:setup": "tsx src/db/cli.ts setup",
+    "eval:ragas": "node services/ragas/run.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "infra:up": "docker compose up -d --wait",
