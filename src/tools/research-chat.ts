@@ -19,18 +19,13 @@ export function renderResearchTopics(
   topics: ResearchTopic[],
   target: string,
 ): string {
-  const intro = `### Đề tài của ${escape(short(target, 220))}\n\nNguồn: HUST Partner API. Có **${topics.length} đề tài** trong dữ liệu trả về. Danh sách theo đối tượng, chưa lọc lĩnh vực hoặc đánh giá mức phù hợp cá nhân.`;
+  const intro = `### Đề tài của ${escape(short(target, 220))}\n\nCó **${topics.length} đề tài**. Nguồn: HUST.`;
   const sections = [intro];
   let shown = 0;
   for (const topic of topics.slice(0, 10)) {
     const fields: [string, unknown][] = [
-      ['Số sinh viên theo nguồn', topic.studentNum],
+      ['Số sinh viên', topic.studentNum],
       ['Đơn vị', topic.departmentName],
-      ['Chương trình theo nguồn', topic.programIds?.join(', ')],
-      ['Loại theo nguồn', topic.types?.join(', ')],
-      ['Mã loại đề tài', topic.topicType],
-      ['Mã loại thực tập', topic.internType],
-      ['Trạng thái nguồn', topic.status],
     ];
     const facts = fields
       .filter(([, v]) => v != null && v !== '')
@@ -44,9 +39,12 @@ export function renderResearchTopics(
     sections.push(section);
     shown++;
   }
-  sections.push(
-    `Hiển thị ${shown}/${topics.length} đề tài. Số sinh viên không khẳng định số chỗ còn trống; mã trạng thái không tự quy đổi thành đang tuyển hoặc đã đóng.${shown < topics.length ? ' Danh sách chưa hiển thị toàn bộ; hãy thu hẹp đối tượng tra cứu.' : ''}`,
-  );
+  if (shown < topics.length)
+    sections.push(`Hiển thị ${shown}/${topics.length} đề tài.`);
+  if (topics.slice(0, shown).some((topic) => topic.studentNum != null))
+    sections.push(
+      'Số sinh viên là số lượng công bố, chưa xác nhận số chỗ còn trống.',
+    );
   return sections.join('\n\n');
 }
 

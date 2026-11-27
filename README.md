@@ -548,7 +548,7 @@ lookup state từ public context của client. Không lưu mô tả đề tài t
 
 Kết quả trả Markdown với tiêu đề/mô tả ngắn và các field theo nguồn, không
 gọi model để viết lại. Tối đa 10 đề tài/khoảng 9.000 ký tự; cắt mô tả có nhãn
-rút gọn và luôn nêu số đang hiển thị/tổng số. Description cho phép multiline,
+rút gọn và nêu số đang hiển thị/tổng số khi danh sách bị cắt. Description cho phép multiline,
 HTML được chuyển thành text; script/style bị bỏ, markup được escape. Link/email
 trong prose được thay bằng nhãn nguồn/liên hệ, không tạo link đăng ký. Không
 diễn giải mã trạng thái thành đang tuyển/đã đóng hoặc số sinh viên thành chỗ trống.
@@ -558,7 +558,9 @@ replay theo cơ chế public tool hiện có. Log không ghi tên/ID/args/payloa
 Schema teacher/company được tách riêng. Theo lần kiểm tra ngày 27/11/2026,
 search thật trả ID number. Đã xác minh một response teacher có 13 đề tài:
 `programIds` có thể là mảng ID số nguyên nội bộ, không chỉ string. Giữ cả
-hai dạng, không tự đổi ID số thành mã ngành IT1/IT2; UI ghi “Chương trình theo nguồn”.
+hai dạng, không tự đổi ID số thành mã ngành IT1/IT2. Phản hồi chat chỉ hiển thị
+tiêu đề, mô tả, số sinh viên và đơn vị khi có; ẩn ID chương trình và các mã
+loại/trạng thái nội bộ để dễ đọc.
 Company mới xác minh được response rỗng và chưa có mô tả field item chính thức
 trong tài liệu được cấp. Adapter company hiện nhận field hiển thị tương ứng
 `title/description/studentNum/departmentName/programIds/types/topicType/internType/status`;
