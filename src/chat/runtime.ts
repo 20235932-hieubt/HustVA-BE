@@ -12,6 +12,7 @@ import { performance } from 'node:perf_hooks';
 import { getToolManager } from '../tools/runtime.js';
 import { createRoutingModel, createToolSelector } from '../tools/selector.js';
 import { MongoStudentSubjectStore } from './student-subject-repository.js';
+import { MongoResearchLookupStore } from './research-target-repository.js';
 
 export const chatShutdown = new AbortController();
 let pending: Promise<ChatService> | undefined;
@@ -37,6 +38,10 @@ export function getChatService(): Promise<ChatService> {
         ? new MongoStudentSubjectStore(connection.db)
         : undefined;
       await subjects?.init();
+      const researchStore = config.topicsEnabled
+        ? new MongoResearchLookupStore(connection.db)
+        : undefined;
+      await researchStore?.init();
       logger.info('chat.runtime.ready', {
         durationMs: performance.now() - started,
       });
@@ -51,6 +56,7 @@ export function getChatService(): Promise<ChatService> {
           createRoutingModel(config),
           config.gradesEnabled,
           config.examsEnabled,
+          config.topicsEnabled,
         ),
         subjects ? { enabled: true, subjects } : undefined,
         {
@@ -58,6 +64,14 @@ export function getChatService(): Promise<ChatService> {
           maxToolCalls: config.maxToolCalls,
           maxToolRounds: config.maxToolRounds,
         },
+        researchStore
+          ? {
+              enabled: true,
+              store: researchStore,
+              maxToolCalls: config.maxToolCalls,
+              maxToolRounds: config.maxToolRounds,
+            }
+          : undefined,
       );
     } catch {
       logger.error('chat.runtime.failed', {

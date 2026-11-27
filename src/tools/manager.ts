@@ -10,6 +10,7 @@ import { findTool, toolCatalog, type ToolDefinition } from './catalog.js';
 import { HustClient } from './client.js';
 import { isGradeTool, normalizeGrades } from './grades.js';
 import { normalizeExams } from './exams.js';
+import { isResearchTool, normalizeResearchTopics } from './research-topics.js';
 import { readToolConfig, type ToolConfig } from './config.js';
 import {
   UpstreamError,
@@ -216,7 +217,9 @@ export class ToolManager {
         ? normalizeGrades(payload)
         : id === 'get_exams'
           ? normalizeExams(payload)
-          : payload;
+          : isResearchTool(id)
+            ? normalizeResearchTopics(id, payload)
+            : payload;
       result = {
         ...base(
           data == null || (Array.isArray(data) && data.length === 0)

@@ -15,12 +15,20 @@ export interface ChatConfig {
   maxOutputTokens: number;
   gradesEnabled?: boolean;
   examsEnabled?: boolean;
+  topicsEnabled?: boolean;
 }
 export function readChatConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): ChatConfig {
   const gradesFlag = env.CHAT_GRADES_ENABLED?.trim() || 'false';
   const examsFlag = env.CHAT_EXAMS_ENABLED?.trim() || 'false';
+  const topicsFlag = env.CHAT_TOPICS_ENABLED?.trim() || 'false';
+  if (!['true', 'false'].includes(topicsFlag))
+    throw new ChatError(
+      503,
+      'CHAT_CONFIG_INVALID',
+      'Cấu hình CHAT_TOPICS_ENABLED không hợp lệ.',
+    );
   if (!['true', 'false'].includes(examsFlag))
     throw new ChatError(
       503,
@@ -78,5 +86,6 @@ export function readChatConfig(
     maxOutputTokens: number('CHAT_MAX_OUTPUT_TOKENS', 1200, 2000),
     gradesEnabled: gradesFlag === 'true',
     examsEnabled: examsFlag === 'true',
+    topicsEnabled: topicsFlag === 'true',
   };
 }
