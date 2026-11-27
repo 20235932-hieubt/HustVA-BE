@@ -598,6 +598,53 @@ pnpm.cmd build
 
 Có thể kiểm tra chức năng qua các endpoint Postman ở trên.
 
+## Bổ sung tham số tool qua nhiều lượt chat
+
+Đặt `CHAT_MULTI_TURN_TOOLS_ENABLED=true` rồi restart backend để bật. Mặc định
+`false`; các cờ điểm/lịch thi/đề tài và enabled settings của từng tool vẫn
+được kiểm tra riêng. Không cần thêm API key hoặc thay giao diện frontend.
+
+LLM dùng `update_tool_request` để hiểu câu mới là bổ sung, sửa, đổi yêu cầu
+hay hủy. Backend giữ tham số hợp lệ, tính trường còn thiếu và chỉ hỏi trường
+đó. Ví dụ: “lịch thi của tôi” -> hỏi kỳ -> “20252” -> gọi lịch thi; hoặc đề
+tài giảng viên -> hỏi tên -> danh sách trùng tên -> chọn bằng đơn vị/số thứ tự.
+Điểm toàn bộ không bắt nhập kỳ, người đã đăng nhập không phải nhập lại MSSV.
+Tên/mã mới phải có căn cứ trong câu hiện tại; không suy ra identity từ tên/email.
+
+Tham số tùy chọn đã nhập sai vẫn phải được sửa hoặc chủ động bỏ lọc, không
+âm thầm chuyển sang tra toàn bộ. Sửa tham số dùng patch; xóa tham số dùng
+`clearFields`. Backend tiếp tục chạy schema/quyền và resolver sẵn có, không
+cho model tự tạo source ID hoặc thực thi trực tiếp tham số chưa kiểm tra.
+
+Pending chỉ có một yêu cầu mỗi conversation, hiệu lực tối đa 10 phút từ lúc
+tạo và không vượt hạn conversation; hỏi lại không gia hạn vô hạn. Snapshot
+`pendingTool` được lưu nội bộ trong completed request cùng response bằng một
+update MongoDB. `null` đánh dấu đã kết thúc, không fallback snapshot cũ.
+Owner/capability và run lease bảo vệ đọc/ghi. Không lưu MSSV, điểm/lịch thi,
+credential hoặc payload API trong snapshot; tên đối tượng công khai được
+cấp privacy token lại mỗi lượt. Metadata không xuất qua history/request API.
+Snapshot hết hiệu lực vẫn nằm trong request đến lúc request hết hạn/xóa
+conversation; đây là thời hạn sử dụng context, không phải TTL xóa riêng 10 phút.
+
+Hủy/chuyển sang kiến thức làm pending và quyền dùng batch đề tài cũ kết thúc.
+Thành công/empty nguồn kết thúc pending; lỗi upstream tạm thời giữ dữ kiện
+để người dùng yêu cầu thử lại. Lỗi model không ghi đè state đã commit.
+Không tự retry nền hoặc tự chạy lại requestId đã bị gián đoạn. Chính sách
+private non-replayable và public replay giữ nguyên; chưa bảo đảm exactly-once
+upstream qua process crash với requestId mới.
+
+Áp dụng cho 11 workflow chat hiện có; `get_academic_result` vẫn là tool nội bộ
+của hồ sơ, không mở endpoint/tool chat mới. Chưa có nhiều mục tiêu đồng thời,
+memory dài hạn hoặc slot filling của RAG. Thông thường một model invocation
+định tuyến mỗi lượt, không gọi model thêm để format/hỏi lại. Ngân sách token,
+tool calls, RPM và retry không tăng. Prompt riêng gọn để vừa ngân sách hiện có.
+
+Rollback bằng `CHAT_MULTI_TURN_TOOLS_ENABLED=false` và restart: selector cũ
+hoạt động lại, snapshot mới bị bỏ qua. Không cần migration hoặc collection
+mới. Test/runner/probe chỉ giữ local tại `../kiem-thu/be/multi-turn-clarification/`,
+không commit và không tạo CI phụ thuộc file ngoài repo. Build backend trước
+khi chạy runner local. Báo cáo kết quả ở workspace `output/reports/`.
+
 ## Mã nguồn chính
 
 | Thành phần               | File                                                                                                                  |
