@@ -56,7 +56,11 @@ const topicShape = {
   description: prose(50_000).nullish(),
   studentNum: z.union([z.number().int().nonnegative(), label]).nullish(),
   departmentName: label.nullish(),
-  programIds: z.array(label).max(200).nullish(),
+  // Partner topic responses use internal numeric program IDs as well as string codes.
+  programIds: z
+    .array(z.union([label, z.number().int().safe().nonnegative()]))
+    .max(200)
+    .nullish(),
   types: z
     .array(z.union([label, z.number().finite()]))
     .max(200)

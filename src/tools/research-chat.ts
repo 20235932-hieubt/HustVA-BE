@@ -26,7 +26,7 @@ export function renderResearchTopics(
     const fields: [string, unknown][] = [
       ['Số sinh viên theo nguồn', topic.studentNum],
       ['Đơn vị', topic.departmentName],
-      ['Mã ngành', topic.programIds?.join(', ')],
+      ['Chương trình theo nguồn', topic.programIds?.join(', ')],
       ['Loại theo nguồn', topic.types?.join(', ')],
       ['Mã loại đề tài', topic.topicType],
       ['Mã loại thực tập', topic.internType],

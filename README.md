@@ -556,8 +556,10 @@ Tool turns không đưa vào model history; response công khai đã normalize g
 replay theo cơ chế public tool hiện có. Log không ghi tên/ID/args/payload.
 
 Schema teacher/company được tách riêng. Theo lần kiểm tra ngày 27/11/2026,
-search thật trả ID number; các đối tượng đã thử có topics `[]`. Chưa xác minh
-item non-empty của hai nguồn, đặc biệt company chưa có mô tả field chính thức
+search thật trả ID number. Đã xác minh một response teacher có 13 đề tài:
+`programIds` có thể là mảng ID số nguyên nội bộ, không chỉ string. Giữ cả
+hai dạng, không tự đổi ID số thành mã ngành IT1/IT2; UI ghi “Chương trình theo nguồn”.
+Company mới xác minh được response rỗng và chưa có mô tả field item chính thức
 trong tài liệu được cấp. Adapter company hiện nhận field hiển thị tương ứng
 `title/description/studentNum/departmentName/programIds/types/topicType/internType/status`;
 biến thể khác trả `HUST_TOPICS_DATA_INVALID`, không đoán hoặc trả raw payload.
