@@ -529,6 +529,9 @@ không phải cờ xác thực sinh viên. Không đưa management token vào ch
 - Search nhiều kết quả: hỏi chọn từ danh sách (tối đa 10), không chọn dòng đầu.
   “Người thứ 2”/“thứ hai” chọn đúng batch đang hiển thị; “thầy đó/công ty đó”
   chỉ tiếp nối đối tượng đã chọn. Chọn từ context cần một tool call topics.
+  Có thể chọn bằng tên trường/đơn vị trong danh sách nếu khớp duy nhất một
+  candidate, kể cả viết không dấu. Nếu nhiều người cùng đơn vị thì hỏi số
+  thứ tự; không mặc định dùng selectedRef cũ trái với đơn vị vừa được chọn.
 - Đơn vị giảng viên nêu trong câu được kiểm tra với `schoolName` bằng so khớp
   text chuẩn hóa; không tự diễn giải tên viết tắt thành tên trường/khoa. Nếu
   không đối chiếu được thì hỏi lại; không áp bộ lọc này cho công ty.

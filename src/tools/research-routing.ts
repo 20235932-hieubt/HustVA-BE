@@ -119,13 +119,27 @@ export function resolveResearchSelection(
     new Set(ordinals).size === 1 &&
     ordinals[0] === selected.index;
   const nameMatch = byName.length === 1 && byName[0].ref === targetRef;
+  const byUnit = context.choices.filter(
+    (choice) =>
+      choice.unit && text.includes(fold(privacy.restore(choice.unit))),
+  );
+  const unitMatch = byUnit.length === 1 && byUnit[0].ref === targetRef;
   if (ordinals.length && !ordinalMatch) return;
   if (byName.length === 1 && !nameMatch) return;
-  if (context.selectedRef !== targetRef && !ordinalMatch && !nameMatch) return;
+  if (byUnit.length === 1 && !unitMatch) return;
+  if (byUnit.length > 1 && !ordinalMatch && !nameMatch) return;
+  if (
+    context.selectedRef !== targetRef &&
+    !ordinalMatch &&
+    !nameMatch &&
+    !unitMatch
+  )
+    return;
   return { kind, targetRef: targetRef! };
 }
 
 export const researchRoutingPrompt = `
+Người dùng có thể chọn bằng đơn vị, ví dụ trả lời "Truong cong nghe thong tin va truyen thong" sau danh sách giảng viên. Nếu đúng một candidate có unit tương ứng thì dùng targetRef của candidate đó, keyWord=null và unitHint=null; không route_knowledge chỉ vì câu tiếp chỉ có tên trường. Nếu nhiều người cùng đơn vị thì hỏi số thứ tự, không chọn ngẫu nhiên.
 Nếu người dùng nêu đơn vị/trường của giảng viên, đặt đúng phần đó trong unitHint để backend đối chiếu schoolName. Không tự thêm unitHint; bỏ/null nếu không được nêu. Không dùng unitHint cho công ty hoặc lựa chọn ref, không coi khoa/trường nêu trong câu là một phần tên người.
 Tra đề tài của giảng viên dùng get_teacher_research_topics; đề tài công ty/thực tập tại đối tác dùng get_company_research_topics. Đây là dữ liệu dùng chung, không cần đăng nhập/MSSV. Tìm theo tên: chỉ đặt tên có trong câu vào keyWord, giữ nguyên token PII_NAME được cấp; targetRef=null. Backend tự search để lấy ID, không tự điền teacherId/companyId.
 Khi chọn từ danh sách ("người thứ 2", "thứ hai") hoặc "thầy đó/công ty đó", dùng targetRef đúng ref trong lookup context backend, keyWord=null. Chưa có selectedRef và người dùng chưa chọn rõ thì hỏi lại; không mặc định lấy candidate đầu. Không tự tạo ref hoặc dùng ref khác loại. Nếu không có tên hoặc context thì ask_clarification với tool tương ứng.
