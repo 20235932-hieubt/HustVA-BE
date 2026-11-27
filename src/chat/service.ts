@@ -409,7 +409,8 @@ export class ChatService {
             Date.now() - turn.createdAt.getTime() <= 30 * 60_000,
         );
         if (recent?.examLookup) {
-          prepared.references.examLookupPending = !recent.examLookup.semester;
+          prepared.references.examLookupPending =
+            !this.multiTurnToolsEnabled && !recent.examLookup.semester;
           prepared.references.examSemester = examSemesterFromContext(
             recent.examLookup.semester
               ? {
@@ -421,8 +422,16 @@ export class ChatService {
           );
         }
       }
+      const researchAllowed =
+        !this.multiTurnToolsEnabled ||
+        (this.store.researchContextAllowed
+          ? await this.store.researchContextAllowed(id)
+          : (await this.store.list(id, 50, 0)).find(
+              (turn) =>
+                turn.status === 'completed' && turn.pendingTool !== undefined,
+            )?.researchContextAllowed === true);
       const researchState =
-        !screen.result && this.researchOptions?.enabled
+        !screen.result && researchAllowed && this.researchOptions?.enabled
           ? await this.researchOptions.store.load(id, tokenHash(token))
           : undefined;
       const pendingTool =
@@ -574,13 +583,19 @@ export class ChatService {
               'Đã hủy yêu cầu tra cứu đang chờ.',
               'HUST_REQUEST_CANCELLED',
             )
-          : toolPlan?.id === 'clarify_tool_request'
+          : toolPlan?.id === 'unavailable_tool_request'
             ? reply(
-                'needs_clarification',
-                toolPlan.clarification!,
-                'HUST_ARGUMENT_REQUIRED',
+                'insufficient_evidence',
+                'Tính năng tra cứu này chưa được bật.',
+                'HUST_TOOL_DISABLED',
               )
-            : undefined) ??
+            : toolPlan?.id === 'clarify_tool_request'
+              ? reply(
+                  'needs_clarification',
+                  toolPlan.clarification!,
+                  'HUST_ARGUMENT_REQUIRED',
+                )
+              : undefined) ??
         (toolPlan?.research && this.tools && this.researchOptions?.enabled
           ? await abortable(
               runResearchTool(toolPlan.research, this.tools, signal, {
@@ -645,6 +660,11 @@ export class ChatService {
         record.pendingTool = keep
           ? (validPending(toolPlan?.pendingRequest) ?? null)
           : null;
+        record.researchContextAllowed = Boolean(
+          (toolPlan?.research ||
+            isResearchTool(toolPlan?.pendingRequest?.tool ?? '')) &&
+          result.status !== 'blocked',
+        );
       }
       if (isPrivateTool(toolPlan?.id ?? '')) await principal?.validate();
       if (toolPlan?.id === 'get_exams' && !record.examLookup)

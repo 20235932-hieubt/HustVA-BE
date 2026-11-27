@@ -253,11 +253,12 @@ export function createToolSelector(
       const result = await model.invoke(
         [
           new SystemMessage(
-            routingPrompt +
-              (gradesEnabled ? gradesPrompt : '') +
-              (examsEnabled ? examsPrompt : '') +
-              (topicsEnabled ? researchRoutingPrompt : '') +
-              (multiTurnEnabled ? continuationPrompt : ''),
+            multiTurnEnabled
+              ? continuationPrompt
+              : routingPrompt +
+                  (gradesEnabled ? gradesPrompt : '') +
+                  (examsEnabled ? examsPrompt : '') +
+                  (topicsEnabled ? researchRoutingPrompt : ''),
           ),
           new HumanMessage(message),
           ...(multiTurnEnabled && continuation
@@ -524,6 +525,16 @@ export function createToolSelector(
         return { id: call.name, arguments: parsed.data };
       };
       const plan = resolvePlan();
+      if (
+        multiTurnEnabled &&
+        plan?.clarification &&
+        pendingRequest &&
+        isResearchTool(pendingRequest.tool) &&
+        research?.choices.length
+      ) {
+        plan.clarification =
+          'Bạn chọn đối tượng số mấy trong danh sách? Bạn cũng có thể nêu đơn vị để phân biệt.';
+      }
       return plan && multiTurnEnabled ? { ...plan, pendingRequest } : plan;
     },
   };

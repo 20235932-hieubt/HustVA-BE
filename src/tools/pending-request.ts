@@ -23,7 +23,10 @@ const text = z
   .min(1)
   .max(200)
   .refine(
-    (s) => !hasSecret(s) && !/@|https?:|\d{7,}|\[\[|[\x00-\x1f]/iu.test(s),
+    (s) =>
+      !hasSecret(s) &&
+      !/@|https?:|\d{7,}|\[\[/iu.test(s) &&
+      !Array.from(s).some((character) => character.charCodeAt(0) < 32),
   );
 export const slotSchema = z.strictObject({
   keyWord: text.optional(),
@@ -72,11 +75,29 @@ export const pendingSchema = z
     createdAt: z.date(),
     expiresAt: z.date(),
     clarificationCount: z.number().int().min(0).max(100),
+    invalidFields: z
+      .array(
+        z.enum([
+          'keyWord',
+          'unitHint',
+          'semester',
+          'courseId',
+          'programId',
+          'currentOnly',
+          'fields',
+        ]),
+      )
+      .max(7)
+      .optional(),
   })
-  .refine((v) =>
-    Object.keys(v.slots).every((k) =>
-      requirements[v.tool].allowed.includes(k as SlotName),
-    ),
+  .refine(
+    (v) =>
+      Object.keys(v.slots).every((k) =>
+        requirements[v.tool].allowed.includes(k as SlotName),
+      ) &&
+      (v.invalidFields ?? []).every((k) =>
+        requirements[v.tool].allowed.includes(k),
+      ),
   );
 export type PendingToolRequest = z.infer<typeof pendingSchema>;
 export function validPending(
@@ -106,14 +127,19 @@ export function questionFor(
   const field = missing[0];
   const question =
     field === 'semester'
-      ? 'Bạn muốn tra lịch thi học kỳ nào?'
+      ? tool === 'get_exams'
+        ? 'Bạn muốn tra lịch thi học kỳ nào?'
+        : 'Bạn muốn xem điểm học kỳ nào? Cho mình mã học kỳ nhé.'
       : field === 'courseId'
         ? 'Bạn muốn xem điểm học phần nào? Cho mình mã học phần nhé.'
         : field === 'programId'
           ? 'Bạn cho mình mã ngành cần tra cứu nhé.'
-          : tool === 'search_teachers' || tool === 'get_teacher_research_topics'
-            ? 'Bạn muốn tra cứu giảng viên tên gì?'
-            : 'Bạn muốn tra cứu công ty nào?';
+          : field === 'unitHint'
+            ? 'Bạn cho mình tên đơn vị của giảng viên cần tra cứu nhé.'
+            : tool === 'search_teachers' ||
+                tool === 'get_teacher_research_topics'
+              ? 'Bạn muốn tra cứu giảng viên tên gì?'
+              : 'Bạn muốn tra cứu công ty nào?';
   const example =
     field === 'semester'
       ? 'Ví dụ: 20252 hoặc “kỳ hiện tại”.'
@@ -142,7 +168,12 @@ export function pendingContext(
         ? { unitHint: privacy.pseudonymize(pending.slots.unitHint) }
         : {}),
     },
-    missingFields: missingSlots(pending.tool, pending.slots),
+    missingFields: [
+      ...new Set([
+        ...missingSlots(pending.tool, pending.slots),
+        ...(pending.invalidFields ?? []),
+      ]),
+    ],
   };
 }
 

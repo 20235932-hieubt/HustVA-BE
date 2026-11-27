@@ -36,6 +36,7 @@ export interface RequestRecord {
   examLookup?: { semester?: string; expiresAt: Date };
   /** Internal snapshot; null is a clear marker. Never returned by publicRecord. */
   pendingTool?: PendingToolRequest | null;
+  researchContextAllowed?: boolean;
 }
 export interface ConversationStore {
   create(hash: string, ownerAccountId?: string): Promise<Conversation>;
@@ -63,6 +64,7 @@ export interface ConversationStore {
   ): Promise<RequestRecord[]>;
   remove(id: string): Promise<void>;
   loadPending?(id: string): Promise<PendingToolRequest | undefined>;
+  researchContextAllowed?(id: string): Promise<boolean>;
 }
 
 export class MongoConversationStore implements ConversationStore {
@@ -173,7 +175,10 @@ export class MongoConversationStore implements ConversationStore {
           ...(record.nonReplayable ? { nonReplayable: true } : {}),
           ...(record.examLookup ? { examLookup: record.examLookup } : {}),
           ...(record.pendingTool !== undefined
-            ? { pendingTool: record.pendingTool }
+            ? {
+                pendingTool: record.pendingTool,
+                researchContextAllowed: record.researchContextAllowed ?? false,
+              }
             : {}),
         },
       },
@@ -199,6 +204,21 @@ export class MongoConversationStore implements ConversationStore {
       { sort: { createdAt: -1, _id: -1 }, projection: { pendingTool: 1 } },
     );
     return validPending(record?.pendingTool);
+  }
+  async researchContextAllowed(id: string) {
+    const record = await this.requests.findOne(
+      {
+        conversationId: id,
+        status: 'completed',
+        pendingTool: { $exists: true },
+        expiresAt: { $gt: new Date() },
+      },
+      {
+        sort: { createdAt: -1, _id: -1 },
+        projection: { researchContextAllowed: 1 },
+      },
+    );
+    return record?.researchContextAllowed === true;
   }
   list(id: string, limit: number, offset: number, contextOnly = false) {
     return this.requests
