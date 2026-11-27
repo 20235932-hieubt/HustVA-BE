@@ -16,6 +16,7 @@ export interface ChatConfig {
   gradesEnabled?: boolean;
   examsEnabled?: boolean;
   topicsEnabled?: boolean;
+  multiTurnToolsEnabled?: boolean;
 }
 export function readChatConfig(
   env: NodeJS.ProcessEnv = process.env,
@@ -23,6 +24,13 @@ export function readChatConfig(
   const gradesFlag = env.CHAT_GRADES_ENABLED?.trim() || 'false';
   const examsFlag = env.CHAT_EXAMS_ENABLED?.trim() || 'false';
   const topicsFlag = env.CHAT_TOPICS_ENABLED?.trim() || 'false';
+  const multiTurnFlag = env.CHAT_MULTI_TURN_TOOLS_ENABLED?.trim() || 'false';
+  if (!['true', 'false'].includes(multiTurnFlag))
+    throw new ChatError(
+      503,
+      'CHAT_CONFIG_INVALID',
+      'Cấu hình CHAT_MULTI_TURN_TOOLS_ENABLED không hợp lệ.',
+    );
   if (!['true', 'false'].includes(topicsFlag))
     throw new ChatError(
       503,
@@ -87,5 +95,6 @@ export function readChatConfig(
     gradesEnabled: gradesFlag === 'true',
     examsEnabled: examsFlag === 'true',
     topicsEnabled: topicsFlag === 'true',
+    multiTurnToolsEnabled: multiTurnFlag === 'true',
   };
 }

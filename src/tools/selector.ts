@@ -33,6 +33,13 @@ import {
   researchRoutingPrompt,
 } from './research-routing.js';
 import type { ResearchReferences } from './research-lookup.js';
+import type { PendingToolRequest } from './pending-request.js';
+import {
+  continuationSchema,
+  continuationPrompt,
+  contextualPending,
+  resolveContinuation,
+} from './multi-turn-routing.js';
 import {
   resolveStudentSubject,
   type SubjectReferences,
@@ -45,6 +52,7 @@ export interface ToolSelector {
     signal: AbortSignal,
     subjects?: SubjectReferences,
     research?: ResearchReferences,
+    continuation?: { pending?: PendingToolRequest; expiresAt: Date },
   ): Promise<ToolPlan | undefined>;
 }
 const toolIds = [
@@ -149,6 +157,7 @@ export function buildRoutingTools(
   gradesEnabled = false,
   examsEnabled = false,
   topicsEnabled = false,
+  multiTurnEnabled = false,
 ) {
   const availableIds: [string, ...string[]] = [
     ...toolIds,
@@ -156,6 +165,21 @@ export function buildRoutingTools(
     ...(examsEnabled ? ['get_exams'] : []),
     ...(topicsEnabled ? researchToolIds : []),
   ];
+  if (multiTurnEnabled)
+    return [
+      tool(async () => '', {
+        name: 'update_tool_request',
+        description:
+          'Thu thập, sửa, tiếp tục hoặc hủy yêu cầu tool; backend kiểm tra phần còn thiếu.',
+        schema: continuationSchema,
+      }),
+      tool(async () => '', {
+        name: 'route_knowledge',
+        description:
+          'Chuyển câu hỏi kiến thức, kết thúc yêu cầu tool đang chờ.',
+        schema: empty,
+      }),
+    ];
   return [
     ...toolCatalog
       .filter((definition) => !definition.internal)
@@ -218,9 +242,10 @@ export function createToolSelector(
   gradesEnabled = false,
   examsEnabled = false,
   topicsEnabled = false,
+  multiTurnEnabled = false,
 ): ToolSelector {
   return {
-    async select(message, signal, subjects, research) {
+    async select(message, signal, subjects, research, continuation) {
       const privacy = currentPrivacy(); // Also enforces external tracing restrictions.
       if (hasSecret(message)) throw invalid();
       message = privacy.pseudonymize(message);
@@ -231,9 +256,17 @@ export function createToolSelector(
             routingPrompt +
               (gradesEnabled ? gradesPrompt : '') +
               (examsEnabled ? examsPrompt : '') +
-              (topicsEnabled ? researchRoutingPrompt : ''),
+              (topicsEnabled ? researchRoutingPrompt : '') +
+              (multiTurnEnabled ? continuationPrompt : ''),
           ),
           new HumanMessage(message),
+          ...(multiTurnEnabled && continuation
+            ? [
+                new SystemMessage(
+                  `Pending request backend: ${JSON.stringify(contextualPending(continuation.pending, privacy) ?? null)}`,
+                ),
+              ]
+            : []),
           ...(topicsEnabled && research
             ? [
                 new SystemMessage(
@@ -254,208 +287,244 @@ export function createToolSelector(
       signal.throwIfAborted();
       if (result.invalid_tool_calls?.length || result.tool_calls?.length !== 1)
         throw invalid();
-      const call = result.tool_calls[0];
-      if (call.name === 'route_knowledge') {
-        if (!empty.safeParse(call.args).success) throw invalid();
-        return undefined;
-      }
-      if (call.name === 'ask_clarification') {
-        const parsed = clarifySchema.safeParse(call.args);
-        if (!parsed.success) throw invalid();
-        if (isGradeTool(parsed.data.tool) && !gradesEnabled) throw invalid();
-        if (parsed.data.tool === 'get_exams' && !examsEnabled) throw invalid();
-        if (isResearchTool(parsed.data.tool) && !topicsEnabled) throw invalid();
-        return {
-          id: parsed.data.tool,
-          arguments: {},
-          clarification: clarifications[parsed.data.tool],
-        };
-      }
-      const definition = findTool(call.name);
-      if (!definition || definition.internal) throw invalid();
-      if (isResearchTool(call.name)) {
-        if (!topicsEnabled) throw invalid('HUST_TOPICS_DISABLED', call.name);
-        const request = resolveResearchSelection(
-          researchKind(call.name),
+      let call = result.tool_calls[0];
+      let pendingRequest: PendingToolRequest | undefined;
+      if (multiTurnEnabled && call.name === 'update_tool_request') {
+        const decision = resolveContinuation(
           call.args,
           message,
           privacy,
-          research,
+          continuation?.pending,
+          continuation?.expiresAt ?? new Date(Date.now() + 600_000),
+          (id) =>
+            (!isGradeTool(id) || gradesEnabled) &&
+            (id !== 'get_exams' || examsEnabled) &&
+            (!isResearchTool(id) || topicsEnabled),
         );
-        return request
-          ? { id: call.name, arguments: {}, research: request }
-          : {
+        if (decision.plan) return decision.plan;
+        if (!decision.call) throw invalid();
+        call = { ...call, ...decision.call };
+        pendingRequest = decision.pending;
+        if (decision.grounding)
+          message += `\n${privacy.pseudonymize(decision.grounding)}`;
+      } else if (multiTurnEnabled && call.name !== 'route_knowledge')
+        throw invalid();
+      const resolvePlan = (): ToolPlan | undefined => {
+        if (call.name === 'route_knowledge') {
+          if (!empty.safeParse(call.args).success) throw invalid();
+          return undefined;
+        }
+        if (call.name === 'ask_clarification') {
+          const parsed = clarifySchema.safeParse(call.args);
+          if (!parsed.success) throw invalid();
+          if (isGradeTool(parsed.data.tool) && !gradesEnabled) throw invalid();
+          if (parsed.data.tool === 'get_exams' && !examsEnabled)
+            throw invalid();
+          if (isResearchTool(parsed.data.tool) && !topicsEnabled)
+            throw invalid();
+          return {
+            id: parsed.data.tool,
+            arguments: {},
+            clarification: clarifications[parsed.data.tool],
+          };
+        }
+        const definition = findTool(call.name);
+        if (!definition || definition.internal) throw invalid();
+        if (isResearchTool(call.name)) {
+          if (!topicsEnabled) throw invalid('HUST_TOPICS_DISABLED', call.name);
+          const request = resolveResearchSelection(
+            researchKind(call.name),
+            call.args,
+            message,
+            privacy,
+            research,
+          );
+          return request
+            ? { id: call.name, arguments: {}, research: request }
+            : {
+                id: call.name,
+                arguments: {},
+                clarification: clarifications[call.name],
+              };
+        }
+
+        if (call.name === 'get_exams') {
+          if (!examsEnabled) throw invalid();
+          const parsed = examsArguments.safeParse(call.args);
+          if (!parsed.success)
+            throw invalid('HUST_EXAMS_SELECTION_SCHEMA_INVALID', call.name);
+          const mentionedIds = privacy
+            .references(message)
+            .filter(
+              (ref) =>
+                ref.startsWith('[[PII_ID_') &&
+                studentIdSchema.safeParse(privacy.restore(ref)).success,
+            );
+          const context = {
+            ...subjects,
+            explicitRefs: [
+              ...new Set([...(subjects?.explicitRefs ?? []), ...mentionedIds]),
+            ],
+            conflict: Boolean(subjects?.conflict) || mentionedIds.length > 1,
+          };
+          const studentId = resolveStudentSubject(
+            parsed.data,
+            context,
+            privacy,
+          );
+          if (!studentId)
+            return {
               id: call.name,
               arguments: {},
-              clarification: clarifications[call.name],
+              clarification:
+                'Mình chưa xác định được tài khoản tra cứu. Bạn đăng nhập và xác nhận lại đối tượng giúp mình nhé.',
             };
-      }
-
-      if (call.name === 'get_exams') {
-        if (!examsEnabled) throw invalid();
-        const parsed = examsArguments.safeParse(call.args);
-        if (!parsed.success)
-          throw invalid('HUST_EXAMS_SELECTION_SCHEMA_INVALID', call.name);
-        const mentionedIds = privacy
-          .references(message)
-          .filter(
-            (ref) =>
-              ref.startsWith('[[PII_ID_') &&
-              studentIdSchema.safeParse(privacy.restore(ref)).success,
-          );
-        const context = {
-          ...subjects,
-          explicitRefs: [
-            ...new Set([...(subjects?.explicitRefs ?? []), ...mentionedIds]),
-          ],
-          conflict: Boolean(subjects?.conflict) || mentionedIds.length > 1,
-        };
-        const studentId = resolveStudentSubject(parsed.data, context, privacy);
-        if (!studentId)
-          return {
-            id: call.name,
-            arguments: {},
-            clarification:
-              'Mình chưa xác định được tài khoản tra cứu. Bạn đăng nhập và xác nhận lại đối tượng giúp mình nhé.',
-          };
-        const rawSemester = parsed.data.semester;
-        const semester =
-          typeof rawSemester !== 'string'
-            ? rawSemester
-            : rawSemester === 'current' || rawSemester === 'upcoming'
-              ? { kind: 'current' as const }
-              : rawSemester === 'context'
-                ? {
-                    kind: 'context' as const,
-                    code: subjects?.examSemester ?? '',
-                  }
-                : { kind: 'code' as const, code: rawSemester };
-        if (
-          semester.kind === 'code' &&
-          !message.split(/[^0-9]+/u).includes(semester.code)
-        )
-          throw invalid('HUST_EXAMS_SEMESTER_NOT_IN_MESSAGE', call.name);
-        if (
-          semester.kind === 'context' &&
-          (!subjects?.examSemester || semester.code !== subjects.examSemester)
-        )
-          throw invalid('HUST_EXAMS_SEMESTER_CONTEXT_INVALID', call.name);
-        // Explicit references must not silently disappear when the model chooses self.
-        if (
-          context.explicitRefs.some((ref) => privacy.restore(ref) !== studentId)
-        )
-          return { id: call.name, arguments: {}, refusal: true };
-        return {
-          id: call.name,
-          arguments: {},
-          studentId,
-          examSemester: semester,
-          upcomingExams: rawSemester === 'upcoming',
-        };
-      }
-
-      if (isGradeTool(call.name)) {
-        if (!gradesEnabled) throw invalid();
-        const selection = (
-          call.name === 'get_grades' ? gradesSelection : courseGradesSelection
-        ).safeParse(call.args);
-        if (!selection.success) throw invalid();
-        const context = subjects ?? {
-          explicitRefs: privacy
-            .references(message)
-            .filter((ref) => ref.startsWith('[[PII_ID_')),
-          conflict: false,
-        };
-        const studentId = resolveStudentSubject(
-          selection.data,
-          context,
-          privacy,
-        );
-        if (!studentId)
-          return {
-            id: call.name,
-            arguments: {},
-            clarification: context.conflict
-              ? 'Có nhiều MSSV hoặc thông tin đối tượng chưa khớp. Bạn xác định lại sinh viên cần tra cứu giúp mình nhé.'
-              : clarifications.get_grades,
-          };
-        const args: Record<string, unknown> = { studentId };
-        for (const key of ['semester', 'courseId'] as const) {
-          const value = (selection.data as Record<string, unknown>)[key];
-          if (typeof value === 'string') {
-            const normalized = value.toUpperCase();
-            if (
-              !message
-                .toUpperCase()
-                .split(/[^A-Z0-9_.-]+/u)
-                .includes(normalized)
+          const rawSemester = parsed.data.semester;
+          const semester =
+            typeof rawSemester !== 'string'
+              ? rawSemester
+              : rawSemester === 'current' || rawSemester === 'upcoming'
+                ? { kind: 'current' as const }
+                : rawSemester === 'context'
+                  ? {
+                      kind: 'context' as const,
+                      code: subjects?.examSemester ?? '',
+                    }
+                  : { kind: 'code' as const, code: rawSemester };
+          if (
+            semester.kind === 'code' &&
+            !message.split(/[^0-9]+/u).includes(semester.code)
+          )
+            throw invalid('HUST_EXAMS_SEMESTER_NOT_IN_MESSAGE', call.name);
+          if (
+            semester.kind === 'context' &&
+            (!subjects?.examSemester || semester.code !== subjects.examSemester)
+          )
+            throw invalid('HUST_EXAMS_SEMESTER_CONTEXT_INVALID', call.name);
+          // Explicit references must not silently disappear when the model chooses self.
+          if (
+            context.explicitRefs.some(
+              (ref) => privacy.restore(ref) !== studentId,
             )
-              throw invalid();
-            args[key] = normalized;
-          }
+          )
+            return { id: call.name, arguments: {}, refusal: true };
+          return {
+            id: call.name,
+            arguments: {},
+            studentId,
+            examSemester: semester,
+            upcomingExams: rawSemester === 'upcoming',
+          };
         }
-        return { id: call.name, arguments: definition.schema.parse(args) };
-      }
-      if (call.name === 'get_student_info') {
-        if (
-          /\[\[PII_(?:ID|NAME)_/u.test(message) ||
-          /sinh vien khac|nguoi khac|cua ban\b/u.test(
-            fold(privacy.restore(message)),
+
+        if (isGradeTool(call.name)) {
+          if (!gradesEnabled) throw invalid();
+          const selection = (
+            call.name === 'get_grades' ? gradesSelection : courseGradesSelection
+          ).safeParse(call.args);
+          if (!selection.success) throw invalid();
+          const context = subjects ?? {
+            explicitRefs: privacy
+              .references(message)
+              .filter((ref) => ref.startsWith('[[PII_ID_')),
+            conflict: false,
+          };
+          const studentId = resolveStudentSubject(
+            selection.data,
+            context,
+            privacy,
+          );
+          if (!studentId)
+            return {
+              id: call.name,
+              arguments: {},
+              clarification: context.conflict
+                ? 'Có nhiều MSSV hoặc thông tin đối tượng chưa khớp. Bạn xác định lại sinh viên cần tra cứu giúp mình nhé.'
+                : clarifications.get_grades,
+            };
+          const args: Record<string, unknown> = { studentId };
+          for (const key of ['semester', 'courseId'] as const) {
+            const value = (selection.data as Record<string, unknown>)[key];
+            if (typeof value === 'string') {
+              const normalized = value.toUpperCase();
+              if (
+                !message
+                  .toUpperCase()
+                  .split(/[^A-Z0-9_.-]+/u)
+                  .includes(normalized)
+              )
+                throw invalid();
+              args[key] = normalized;
+            }
+          }
+          return { id: call.name, arguments: definition.schema.parse(args) };
+        }
+        if (call.name === 'get_student_info') {
+          if (
+            /\[\[PII_(?:ID|NAME)_/u.test(message) ||
+            /sinh vien khac|nguoi khac|cua ban\b/u.test(
+              fold(privacy.restore(message)),
+            )
           )
-        )
-          return { id: call.name, arguments: {}, refusal: true };
-        const parsed = profileSelection.safeParse(call.args ?? {});
-        if (!parsed.success) throw invalid();
-        const named = profileFieldsIn(privacy.restore(message));
-        const fields = named.length
-          ? named
-          : [...new Set(parsed.data.fields ?? [])];
-        return {
-          id: call.name,
-          arguments: {},
-          fields: fields.length ? fields : undefined,
-        };
-      }
-      if (call.name === 'get_semesters') {
-        const parsed = semesterSelection.safeParse(call.args);
-        if (!parsed.success) throw invalid();
-        return {
-          id: call.name,
-          arguments: {},
-          currentSemester: parsed.data.currentOnly,
-        };
-      }
-      const args = { ...call.args };
-      if (typeof args.keyWord === 'string') {
-        // Resolve only name tokens actually issued in this turn, locally.
-        const references = args.keyWord.match(/\[\[.*?\]\]/gu) ?? [];
-        if (
-          references.some(
-            (reference) =>
-              !/^\[\[PII_NAME_[a-f0-9]{32}\]\]$/u.test(reference) ||
-              !privacy.owns(reference),
+            return { id: call.name, arguments: {}, refusal: true };
+          const parsed = profileSelection.safeParse(call.args ?? {});
+          if (!parsed.success) throw invalid();
+          const named = profileFieldsIn(privacy.restore(message));
+          const fields = named.length
+            ? named
+            : [...new Set(parsed.data.fields ?? [])];
+          return {
+            id: call.name,
+            arguments: {},
+            fields: fields.length ? fields : undefined,
+          };
+        }
+        if (call.name === 'get_semesters') {
+          const parsed = semesterSelection.safeParse(call.args);
+          if (!parsed.success) throw invalid();
+          return {
+            id: call.name,
+            arguments: {},
+            currentSemester: parsed.data.currentOnly,
+          };
+        }
+        const args = { ...call.args };
+        if (typeof args.keyWord === 'string') {
+          // Resolve only name tokens actually issued in this turn, locally.
+          const references = args.keyWord.match(/\[\[.*?\]\]/gu) ?? [];
+          if (
+            references.some(
+              (reference) =>
+                !/^\[\[PII_NAME_[a-f0-9]{32}\]\]$/u.test(reference) ||
+                !privacy.owns(reference),
+            )
           )
-        )
-          throw invalid();
-        args.keyWord = privacy.restore(args.keyWord).trim();
-        if (hasSecret(args.keyWord) || /@|https?:|\d{7,}/iu.test(args.keyWord))
-          throw invalid();
-        if (!fold(privacy.restore(message)).includes(fold(args.keyWord)))
-          throw invalid();
-      }
-      if (typeof args.programId === 'string') {
-        args.programId = args.programId.toUpperCase();
-        if (
-          !message
-            .toUpperCase()
-            .split(/[^A-Z0-9]+/u)
-            .includes(args.programId)
-        )
-          throw invalid();
-      }
-      const parsed = definition.schema.safeParse(args);
-      if (!parsed.success) throw invalid();
-      return { id: call.name, arguments: parsed.data };
+            throw invalid();
+          args.keyWord = privacy.restore(args.keyWord).trim();
+          if (
+            hasSecret(args.keyWord) ||
+            /@|https?:|\d{7,}/iu.test(args.keyWord)
+          )
+            throw invalid();
+          if (!fold(privacy.restore(message)).includes(fold(args.keyWord)))
+            throw invalid();
+        }
+        if (typeof args.programId === 'string') {
+          args.programId = args.programId.toUpperCase();
+          if (
+            !message
+              .toUpperCase()
+              .split(/[^A-Z0-9]+/u)
+              .includes(args.programId)
+          )
+            throw invalid();
+        }
+        const parsed = definition.schema.safeParse(args);
+        if (!parsed.success) throw invalid();
+        return { id: call.name, arguments: parsed.data };
+      };
+      const plan = resolvePlan();
+      return plan && multiTurnEnabled ? { ...plan, pendingRequest } : plan;
     },
   };
 }
@@ -500,6 +569,7 @@ export function createRoutingModel(
                 config.gradesEnabled,
                 config.examsEnabled,
                 config.topicsEnabled,
+                config.multiTurnToolsEnabled,
               ),
               {
                 tool_choice: 'any',
