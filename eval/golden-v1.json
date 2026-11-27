@@ -1,0 +1,1033 @@
+{
+  "version": "v1-draft",
+  "createdAt": "2026-11-26",
+  "description": "Bộ câu hỏi kiểm thử sinh từ tài liệu đã crawl. answers: cụm trích nguyên văn (so khớp bỏ khoảng trắng, không phân biệt hoa thường) dùng chấm retrieval; reference: đáp án chuẩn ngắn dùng chấm câu trả lời; expected_behavior: answer | correct_premise | refuse | clarify | answer_with_caveat. Câu no_answer/ambiguous có answers rỗng, phải loại khỏi phép tính Hit@k.",
+  "stats": {
+    "simple": 25,
+    "paraphrase": 4,
+    "multi_hop": 9,
+    "false_premise": 8,
+    "no_answer": 8,
+    "ambiguous": 4,
+    "conflict": 4
+  },
+  "questions": [
+    {
+      "id": "s01",
+      "question": "1 kỳ chính em đc đăng ký tối đa bao nhiêu tín?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Đăng ký học",
+      "answers": [
+        "được đăng ký tối đa 24 TC và tối thiểu 12 TC trong học kỳ chính"
+      ],
+      "reference": "Tối đa 24 TC, tối thiểu 12 TC mỗi học kỳ chính (năm cuối không áp dụng mức tối thiểu). Sinh viên đang bị cảnh báo học tập bị giới hạn riêng.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "QC2025 Điều 10.2a"
+    },
+    {
+      "id": "s02",
+      "question": "ki he dc dang ky toi da may tin a",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Đăng ký học",
+      "answers": ["Sinh viên được đăng ký tối đa 8 TC trong học kỳ hè"],
+      "reference": "Tối đa 8 TC trong học kỳ hè.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "QC2025 Điều 10.2a. Viết không dấu để thử retriever."
+    },
+    {
+      "id": "s03",
+      "question": "Nghỉ học 5 buổi thì bị trừ bao nhiêu điểm quá trình?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Điểm, đánh giá",
+      "answers": [
+        "Số lần vắng mặt : 0 1 - 2 3 - 4 ≥ 5",
+        "Điểm quá trình được cộng/trừ: +1 0 - 1 - 2"
+      ],
+      "reference": "Vắng từ 5 lần trở lên bị trừ 2 điểm quá trình (0 lần: +1; 1–2 lần: 0; 3–4 lần: −1).",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "QC2025 Điều 5.2. Bảng trong PDF bị tách dòng, đáp án nằm ở 2 dòng liền nhau."
+    },
+    {
+      "id": "s04",
+      "question": "Muốn phúc khảo điểm thì phải nộp đơn trong bao lâu?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Thi, phúc tra",
+      "answers": [
+        "trong thời hạn 7 ngày kể từ khi điểm học phần được cập nhật vào tài khoản học tập"
+      ],
+      "reference": "Trong 7 ngày kể từ khi điểm học phần được cập nhật vào tài khoản. Không áp dụng với học phần thi vấn đáp hoặc đánh giá trước hội đồng.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "QC2025 Điều 6.4. Sinh viên nói \"phúc khảo\", văn bản ghi \"phúc tra\"."
+    },
+    {
+      "id": "s05",
+      "question": "Điểm thi cuối kỳ bao nhiêu thì bị tính là điểm liệt?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Điểm, đánh giá",
+      "answers": ["Điểm số dưới 3 đối với các học phần khác"],
+      "reference": "Dưới 3 (thang 10) là điểm liệt với học phần thông thường; với đồ án/khóa luận tốt nghiệp là dưới 5. Có một điểm thành phần liệt thì điểm học phần là F.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "QC2025 Điều 5.5–5.6"
+    },
+    {
+      "id": "s06",
+      "question": "Trường xét tốt nghiệp mấy đợt một năm?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Tốt nghiệp",
+      "answers": ["xét tốt nghiệp theo 03 đợt trong năm"],
+      "reference": "3 đợt mỗi năm: cuối mỗi học kỳ chính và cuối học kỳ hè.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "QC2025 Điều 14.1"
+    },
+    {
+      "id": "s07",
+      "question": "CPA tối thiểu bao nhiêu thì mới được xét tốt nghiệp?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Tốt nghiệp",
+      "answers": [
+        "Điểm trung bình tích lũy toàn khóa (tính theo các học phần đăng ký tốt nghiệp) đạt từ 2,0 trở lên"
+      ],
+      "reference": "CPA toàn khóa (tính theo các học phần đăng ký tốt nghiệp) từ 2,0 trở lên, cùng các điều kiện: hoàn thành đủ học phần (kể cả GDTC, GDQP-AN), đạt chuẩn ngoại ngữ đầu ra, không bị truy cứu hình sự/đình chỉ học.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "QC2025 Điều 14.3"
+    },
+    {
+      "id": "s08",
+      "question": "CPA 3.3 thì xếp loại học lực gì?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Điểm, GPA, CPA",
+      "answers": [
+        "GPA hoặc CPA < 1,0 1,0 - 1,99 2,0 - 2,49 2,5 - 3,19 3,2 - 3,59 3,6 - 4,0",
+        "Xếp loại Kém Yếu Trung bình Khá Giỏi Xuất sắc"
+      ],
+      "reference": "Loại Giỏi (CPA 3,2 – 3,59).",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "QC2025 Điều 12.6. Phải đọc bảng hai dòng để ghép mốc với nhãn."
+    },
+    {
+      "id": "s09",
+      "question": "em tích lũy được 70 tín rồi thì tính là sinh viên năm mấy?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Điểm, GPA, CPA",
+      "answers": ["Số TCTL < 32 32 - 63 64 - 95 96 - 127 ≥ 128"],
+      "reference": "Năm thứ ba (64 – 95 TC tích lũy).",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "QC2025 Điều 12.5"
+    },
+    {
+      "id": "s10",
+      "question": "Kỳ này em trượt 10 tín thì có bị cảnh báo học tập không?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Cảnh báo, thôi học",
+      "answers": [
+        "Nâng một mức cảnh báo học tập đối với sinh viên có số TC không đạt trong học kỳ lớn hơn 8"
+      ],
+      "reference": "Có. Số TC không đạt trong học kỳ lớn hơn 8 thì bị nâng một mức cảnh báo (lớn hơn 16 thì nâng hai mức).",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "QC2025 Điều 19.1a-b"
+    },
+    {
+      "id": "s11",
+      "question": "Trường hợp nào thì sinh viên bị buộc thôi học vì học kém?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Cảnh báo, thôi học",
+      "answers": ["Sinh viên bị cảnh báo học tập mức 3 lần thứ hai liên tiếp"],
+      "reference": "Bị cảnh báo mức 3 lần thứ hai liên tiếp; hoặc học chậm tiến độ quá thời gian cho phép / không còn khả năng tốt nghiệp trong thời gian cho phép.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "QC2025 Điều 19.3"
+    },
+    {
+      "id": "s12",
+      "question": "rút môn trong 7 tuần đầu thì có phải đóng học phí môn đó ko?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Học phí",
+      "answers": ["chỉ đóng một nửa (50%) học phí của học phần đó"],
+      "reference": "Nếu được duyệt thì chỉ đóng 50% học phí học phần đó; rút trong tuần đầu của học kỳ 2 thì không phải đóng. Không áp dụng cho kỳ hè.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "QC2025 Điều 9.3"
+    },
+    {
+      "id": "s13",
+      "question": "Điều kiện để được mở lớp học phần rút gọn là gì?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Đăng ký học",
+      "answers": [
+        "Sinh viên đã học học phần đó ít nhất 02 lần nhưng chưa đạt",
+        "Điểm quá trình của học phần phải từ 2 điểm trở lên trong lần học gần nhất"
+      ],
+      "reference": "Thỏa đồng thời: đã học học phần ít nhất 2 lần chưa đạt; điểm quá trình lần gần nhất từ 2 trở lên; trình độ từ năm thứ ba trở lên. Học phí lớp rút gọn bằng 50%.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "QC2025 Điều 10.5, Điều 9.5"
+    },
+    {
+      "id": "s14",
+      "question": "Muốn chuyển ngành thì cần CPA bao nhiêu?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Chuyển ngành, song bằng",
+      "answers": [
+        "Xếp loại học lực căn cứ theo điểm trung bình tích lũy (CPA) đạt từ loại khá trở lên"
+      ],
+      "reference": "CPA ≥ 2,5 (loại khá), học hết năm thứ nhất, đáp ứng điều kiện trúng tuyển của CTĐT mới, không bị cảnh báo học tập, không đang bị kỷ luật.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "QC2025 Điều 17.1"
+    },
+    {
+      "id": "s15",
+      "question": "Sớm nhất khi nào thì được đăng ký học song bằng?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Chuyển ngành, song bằng",
+      "answers": [
+        "sớm nhất khi đã được xếp trình độ năm thứ hai của chương trình thứ nhất"
+      ],
+      "reference": "Khi đã được xếp trình độ năm thứ hai của chương trình thứ nhất, CPA từ trung bình trở lên và đáp ứng điều kiện trúng tuyển chương trình thứ hai.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "QC2025 Điều 18.2. Sinh viên nói \"song bằng\", văn bản ghi \"học cùng lúc hai chương trình\"."
+    },
+    {
+      "id": "s16",
+      "question": "Em muốn bảo lưu vì lý do cá nhân thì được nghỉ tối đa bao lâu?",
+      "type": "paraphrase",
+      "expected_behavior": "answer",
+      "topic": "Cảnh báo, thôi học",
+      "answers": ["Thời gian nghỉ học tối đa cho phép là 04 học kỳ chính"],
+      "reference": "Phải học ít nhất 1 học kỳ; nghỉ tối đa 4 học kỳ chính và tính vào thời gian chậm tiến độ; quá 4 học kỳ chính sẽ bị xét buộc thôi học.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "QC2025 Điều 16.2d. Sinh viên nói \"bảo lưu\", văn bản ghi \"nghỉ học tạm thời\"."
+    },
+    {
+      "id": "s17",
+      "question": "Hôm thi cuối kỳ em bị ốm không đi thi được thì sao ạ?",
+      "type": "paraphrase",
+      "expected_behavior": "answer",
+      "topic": "Thi, phúc tra",
+      "answers": ["trong thời hạn 2 học kỳ chính tiếp theo để hoàn thiện điểm"],
+      "reference": "Được hoãn thi (có lý do chính đáng) và dự thi trong 2 học kỳ chính tiếp theo; quá hạn thì điểm học phần là F. Trong thời gian chờ nhận điểm I.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "QC2025 Điều 6.3, 5.9a. Câu kể hoàn cảnh, không dùng từ \"hoãn thi\"."
+    },
+    {
+      "id": "s18",
+      "question": "Học phí ngành Khoa học máy tính năm 2026-2027 là bao nhiêu 1 tín?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Học phí",
+      "answers": [
+        "KT Cơ điện tử, KT điện tử - viễn thông, KT điều khiển - tự động hóa, Khoa 700 học máy tính"
+      ],
+      "reference": "700 nghìn đồng/tín chỉ học phí (TCHP) cho chương trình chuẩn.",
+      "sources": [
+        {
+          "documentId": "89774fc28348d6f105ff53b507065574dc65ad2f8b20d38dbc083e2111ba0a59",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hocphi/2026-2027/12006_Q%C4%90-%C4%90HBK.pdf"
+        }
+      ],
+      "note": "QĐ học phí 2026-2027. Bảng PDF bị vỡ, số 700 chen giữa tên ngành."
+    },
+    {
+      "id": "s19",
+      "question": "Học phí kỳ hè có đắt hơn kỳ chính không?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Học phí",
+      "answers": ["Mức học phí học kỳ hè được tính bằng 1,5 lần mức học phí"],
+      "reference": "Có, học phí kỳ hè bằng 1,5 lần mức kỳ chính (trừ một số học phần và CTĐT kỹ sư chuyên sâu).",
+      "sources": [
+        {
+          "documentId": "89774fc28348d6f105ff53b507065574dc65ad2f8b20d38dbc083e2111ba0a59",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hocphi/2026-2027/12006_Q%C4%90-%C4%90HBK.pdf"
+        }
+      ],
+      "note": "QĐ học phí 2026-2027, Phụ lục I mục 5"
+    },
+    {
+      "id": "s20",
+      "question": "Mượn giáo trình ở thư viện được mấy cuốn, trong bao lâu?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Thư viện",
+      "answers": ["Số lượng mượn: tối đa 08 cuốn.", "Thời hạn mượn: 60 ngày"],
+      "reference": "Phòng mượn giáo trình 111: tối đa 8 cuốn, 60 ngày, mỗi tài liệu gia hạn 1 lần thêm 30 ngày.",
+      "sources": [
+        {
+          "documentId": "ed81f3e2d28cc557a7b1d2224988b98c975328efd8d5ec8078c9aa83bb908c85",
+          "url": "https://library.hust.edu.vn/vi/node/38"
+        }
+      ],
+      "note": "Trang \"Mượn tài liệu về nhà\""
+    },
+    {
+      "id": "s21",
+      "question": "Cuối tuần phòng tự học thư viện mở đến mấy giờ?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Thư viện",
+      "answers": ["8h00- 19h00 ngày thứ 7, chủ nhật"],
+      "reference": "Phòng tự học 301, 303, 401, 418: thứ 7 và chủ nhật mở 8h00 – 19h00 (ngày thường 8h00 – 21h00).",
+      "sources": [
+        {
+          "documentId": "bd6410acf07edbdf0680e6c017b4f4e6072798758b26076ce3001e30dfa99ad3",
+          "url": "https://library.hust.edu.vn/vi/node/416"
+        }
+      ],
+      "note": "Trang \"Giờ phục vụ\""
+    },
+    {
+      "id": "s22",
+      "question": "Đặt phòng học nhóm mà nhóm em đến muộn thì có bị mất phòng không?",
+      "type": "paraphrase",
+      "expected_behavior": "answer",
+      "topic": "Thư viện",
+      "answers": ["Nếu quá 15 phút không đến, thư viện có quyền hủy lịch"],
+      "reference": "Có thể mất: quá 15 phút không đến thì thư viện có quyền hủy lịch và giao phòng cho nhóm khác.",
+      "sources": [
+        {
+          "documentId": "1f0f9b2579e23b2e0ebd85f26cb80b644b364e41369eaf1a79599d96e1f0bb86",
+          "url": "https://library.hust.edu.vn/vi/node/1362"
+        }
+      ],
+      "note": "Trang \"Dịch vụ sử dụng phòng học nhóm\""
+    },
+    {
+      "id": "s23",
+      "question": "K71 học chương trình chuẩn thì cần tiếng Anh bậc mấy để tốt nghiệp?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Ngoại ngữ",
+      "answers": [
+        "(trừ các CTĐT nhóm ngành ngôn ngữ) 3 trở lên theo Bảng 2.1, Phụ lục II"
+      ],
+      "reference": "Có chứng chỉ tiếng Anh quy đổi tương đương từ Bậc 3 trở lên (theo Bảng 2.1, Phụ lục II).",
+      "sources": [
+        {
+          "documentId": "42360bb0a3b1d0855b6645e6a62f8870869261b0ad80050f2e32c54e9b9f2075",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/00_%20Quy%20%C4%91%E1%BB%8Bnh%20ngo%E1%BA%A1i%20ng%E1%BB%AF%20K71_final_%C4%91%C3%A3%20k%C3%BD.pdf"
+        }
+      ],
+      "note": "QĐ ngoại ngữ K71, Bảng 3.2. Bảng PDF bị tách dòng."
+    },
+    {
+      "id": "s24",
+      "question": "IELTS em thi từ 3 năm trước thì còn dùng xét chuẩn đầu ra được không?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Ngoại ngữ",
+      "answers": [
+        "phải được cấp trong vòng 2 năm tính đến thời điểm xét chuẩn ngoại ngữ đầu ra"
+      ],
+      "reference": "Không. Chứng chỉ phải được cấp trong vòng 2 năm tính đến thời điểm xét và còn hiệu lực, đánh giá đủ 4 kỹ năng.",
+      "sources": [
+        {
+          "documentId": "42360bb0a3b1d0855b6645e6a62f8870869261b0ad80050f2e32c54e9b9f2075",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/00_%20Quy%20%C4%91%E1%BB%8Bnh%20ngo%E1%BA%A1i%20ng%E1%BB%AF%20K71_final_%C4%91%C3%A3%20k%C3%BD.pdf"
+        }
+      ],
+      "note": "QĐ ngoại ngữ K71, Điều 5.2"
+    },
+    {
+      "id": "s25",
+      "question": "TOEFL iBT Home Edition có được trường công nhận không?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Ngoại ngữ",
+      "answers": ["bao gồm TOEFL iBT Home Edition"],
+      "reference": "Không. Trường không công nhận chứng chỉ thi trực tuyến tại nhà, bao gồm TOEFL iBT Home Edition.",
+      "sources": [
+        {
+          "documentId": "42360bb0a3b1d0855b6645e6a62f8870869261b0ad80050f2e32c54e9b9f2075",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/00_%20Quy%20%C4%91%E1%BB%8Bnh%20ngo%E1%BA%A1i%20ng%E1%BB%AF%20K71_final_%C4%91%C3%A3%20k%C3%BD.pdf"
+        }
+      ],
+      "note": "QĐ ngoại ngữ K71, Phụ lục II mục 2"
+    },
+    {
+      "id": "s26",
+      "question": "Điểm giảng viên hướng dẫn đồ án dưới 5 thì có được bảo vệ không?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Đồ án, tốt nghiệp",
+      "answers": ["thì sinh viên không được phép tham gia bảo vệ ĐATN"],
+      "reference": "Không. Điểm người hướng dẫn hoặc phản biện dưới 5 thì không được bảo vệ, điểm bảo vệ tính là 0.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "QC2025 Điều 13.2c"
+    },
+    {
+      "id": "s27",
+      "question": "Em làm mất bằng đại học rồi, giờ phải làm sao?",
+      "type": "paraphrase",
+      "expected_behavior": "answer",
+      "topic": "Thẻ, giấy tờ, thủ tục",
+      "answers": [
+        "Phải có giấy tường trình về việc mất trộm có xác nhận của công an"
+      ],
+      "reference": "Xin giấy chứng nhận tốt nghiệp thay bằng: cần giấy tường trình có xác nhận của công an và CMND/CCCD; nhận giấy sau 3 ngày kể từ khi nộp.",
+      "sources": [
+        {
+          "documentId": "a0b76f3f119b6a2e512e5bdceb5f22381166107f03748ef55317ee2e7baecd48",
+          "url": "https://ctt.hust.edu.vn/DisplayWeb/DisplayBaiViet?baiviet=35518"
+        }
+      ],
+      "note": "Thông báo của Phòng Đào tạo (văn bản cũ, cần xác nhận còn hiệu lực)."
+    },
+    {
+      "id": "s28",
+      "question": "GPA 3.4, điểm rèn luyện 85 thì đủ điều kiện học bổng KKHT loại nào?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Học bổng",
+      "answers": [
+        "Học bổng loại B: GPA ≥ 3,2 và điểm rèn luyện học kỳ ≥ 80 điểm"
+      ],
+      "reference": "Đủ tiêu chuẩn loại B (Giỏi): GPA ≥ 3,2 và ĐRL ≥ 80. Chưa đủ loại A (cần GPA ≥ 3,6, ĐRL ≥ 90). Việc có nhận được hay không còn phụ thuộc quỹ và xếp hạng theo khóa/ngành.",
+      "sources": [
+        {
+          "documentId": "ae4aebbd41933c83fadf91251bf1c88c09dd3381476a5b27361ee1c512ff1923",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguyen%20Viet%20Tien/files/Quy%20%C4%91%E1%BB%8Bnh%20v%E1%BB%81%20vi%E1%BB%87c%20x%C3%A9t%20c%E1%BA%A5p%20HB%20KKHT.pdf"
+        }
+      ],
+      "note": "Quy định KKHT 2020 (QĐ 2124). Văn bản năm 2020, cần nghiệp vụ xác nhận còn áp dụng."
+    },
+    {
+      "id": "s29",
+      "question": "Bao giờ thì có danh sách học bổng KKHT?",
+      "type": "simple",
+      "expected_behavior": "answer",
+      "topic": "Học bổng",
+      "answers": ["chậm nhất vào tuần học thứ 10 của học kỳ cấp học bổng"],
+      "reference": "Chậm nhất vào tuần học thứ 10 của học kỳ cấp học bổng.",
+      "sources": [
+        {
+          "documentId": "ae4aebbd41933c83fadf91251bf1c88c09dd3381476a5b27361ee1c512ff1923",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguyen%20Viet%20Tien/files/Quy%20%C4%91%E1%BB%8Bnh%20v%E1%BB%81%20vi%E1%BB%87c%20x%C3%A9t%20c%E1%BA%A5p%20HB%20KKHT.pdf"
+        }
+      ],
+      "note": "Quy định KKHT 2020, Điều 5.1"
+    },
+    {
+      "id": "m01",
+      "question": "Em học chương trình chuẩn, đang bị cảnh báo mức 2. Kỳ hè và kỳ 1 năm sau em đăng ký được tối đa bao nhiêu tín?",
+      "type": "multi_hop",
+      "expected_behavior": "answer",
+      "topic": "Đăng ký học",
+      "answers": [
+        "Sinh viên thuộc các CTĐT chuẩn được đăng ký tối đa 14 TC và tối thiểu 8 TC",
+        "Sinh viên được đăng ký tối đa 8 TC trong học kỳ hè"
+      ],
+      "reference": "Kỳ hè: tối đa 8 TC. Học kỳ 1 năm sau: tối đa 14 TC, tối thiểu 8 TC (vì đang bị cảnh báo từ mức 2).",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "Ghép Điều 10.2a và Điều 19.2a."
+    },
+    {
+      "id": "m02",
+      "question": "Em học Khoa học máy tính, kỳ hè 2026-2027 học 1 tín thì mất bao nhiêu tiền?",
+      "type": "multi_hop",
+      "expected_behavior": "answer",
+      "topic": "Học phí",
+      "answers": [
+        "KT Cơ điện tử, KT điện tử - viễn thông, KT điều khiển - tự động hóa, Khoa 700 học máy tính",
+        "Mức học phí học kỳ hè được tính bằng 1,5 lần mức học phí"
+      ],
+      "reference": "700 × 1,5 = 1.050 nghìn đồng/TCHP (khoảng 1,05 triệu đồng mỗi tín chỉ học phí).",
+      "sources": [
+        {
+          "documentId": "89774fc28348d6f105ff53b507065574dc65ad2f8b20d38dbc083e2111ba0a59",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hocphi/2026-2027/12006_Q%C4%90-%C4%90HBK.pdf"
+        }
+      ],
+      "note": "Ghép 2 mục trong cùng quyết định rồi tính. Kiểm tra bot có tính đúng không."
+    },
+    {
+      "id": "m03",
+      "question": "Đồ án tốt nghiệp 12 tín của ngành KHMT năm 2026-2027 thì học phí bao nhiêu?",
+      "type": "multi_hop",
+      "expected_behavior": "answer",
+      "topic": "Học phí",
+      "answers": [
+        "Khóa luận tốt nghiệp, đồ án tốt nghiệp 1 TCHT = 2,5 TCHP",
+        "KT Cơ điện tử, KT điện tử - viễn thông, KT điều khiển - tự động hóa, Khoa 700 học máy tính"
+      ],
+      "reference": "12 TC × 2,5 = 30 TCHP; 30 × 700 nghìn = 21.000.000 đồng.",
+      "sources": [
+        {
+          "documentId": "89774fc28348d6f105ff53b507065574dc65ad2f8b20d38dbc083e2111ba0a59",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hocphi/2026-2027/12006_Q%C4%90-%C4%90HBK.pdf"
+        }
+      ],
+      "note": "Phải biết quy đổi TCHT sang TCHP (Phụ lục II) rồi nhân mức học phí (Phụ lục I)."
+    },
+    {
+      "id": "m04",
+      "question": "CPA em 3.65 nhưng phải học lại 10 tín trên tổng 132 tín, thì em tốt nghiệp bằng gì?",
+      "type": "multi_hop",
+      "expected_behavior": "answer",
+      "topic": "Tốt nghiệp, hạng bằng",
+      "answers": [
+        "Khối lượng của các học phần phải học lại vượt quá 5% của tổng số TC",
+        "GPA hoặc CPA < 1,0 1,0 - 1,99 2,0 - 2,49 2,5 - 3,19 3,2 - 3,59 3,6 - 4,0"
+      ],
+      "reference": "10/132 ≈ 7,6% > 5% nên bị giảm một mức: từ Xuất sắc xuống Giỏi (áp dụng với khóa tuyển sinh từ 2022).",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "Ghép Điều 15.2a, bảng xếp loại Điều 12.6 và hiệu lực Điều 48.2a."
+    },
+    {
+      "id": "m05",
+      "question": "Em vắng 5 buổi, điểm quá trình gốc là 4 thì có bị F không?",
+      "type": "multi_hop",
+      "expected_behavior": "answer",
+      "topic": "Điểm, đánh giá",
+      "answers": [
+        "Điểm quá trình được cộng/trừ: +1 0 - 1 - 2",
+        "Điểm số dưới 3 đối với các học phần khác"
+      ],
+      "reference": "Bị trừ 2 điểm nên điểm quá trình còn 2, dưới 3 là điểm liệt, nên điểm học phần là F.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "CẦN NGHIỆP VỤ XÁC NHẬN: quy chế không nói rõ điểm liệt xét trước hay sau khi trừ điểm chuyên cần."
+    },
+    {
+      "id": "m06",
+      "question": "Em sắp tốt nghiệp, đang mượn sách ở phòng 111, em cần làm gì với thư viện và đi hôm nào được?",
+      "type": "multi_hop",
+      "expected_behavior": "answer",
+      "topic": "Thư viện",
+      "answers": [
+        "cần đề nghị trực tiếp với cán bộ phòng mượn khóa tài khoản",
+        "Sáng thứ 3 và sáng thứ 6 không phục vụ"
+      ],
+      "reference": "Trả hết sách đang mượn tại phòng 111, xử lý đền/vi phạm nếu có, đề nghị cán bộ khóa tài khoản để hoàn tất công nợ. Phòng 111 mở 8h–12h và 13h30–17h30, nhưng không phục vụ sáng thứ 3 và sáng thứ 6.",
+      "sources": [
+        {
+          "documentId": "423bd367300182e830085a454f0f43b501d1145d7771c70dad818f6110fb4666",
+          "url": "https://library.hust.edu.vn/vi/node/61"
+        },
+        {
+          "documentId": "ed81f3e2d28cc557a7b1d2224988b98c975328efd8d5ec8078c9aa83bb908c85",
+          "url": "https://library.hust.edu.vn/vi/node/38"
+        }
+      ],
+      "note": "Ghép trang \"Thủ tục thanh toán ra trường\" và trang \"Mượn tài liệu về nhà\"."
+    },
+    {
+      "id": "m07",
+      "question": "Tuần thứ 5 của kỳ em xin bảo lưu thì học phí kỳ đó tính thế nào?",
+      "type": "multi_hop",
+      "expected_behavior": "answer",
+      "topic": "Học phí",
+      "answers": [
+        "sẽ bị hủy và tính học phí theo quy định tại khoản 4 Điều 9",
+        "phải đóng một nửa (50%) học phí của học kỳ đó"
+      ],
+      "reference": "Các học phần đã đăng ký bị hủy; nộp đơn trong 7 tuần đầu và được duyệt thì đóng 50% học phí học kỳ đó (không áp dụng kỳ hè; trường hợp ốm/thai sản/nghĩa vụ quân sự do Giám đốc quyết định).",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "Điều 16.4 dẫn chiếu sang Điều 9.4, nên retriever phải lấy được cả 2 đoạn."
+    },
+    {
+      "id": "m08",
+      "question": "Kỳ trước em có 1 môn bị F nhưng GPA vẫn 3.2, rèn luyện 90, em có được học bổng KKHT không?",
+      "type": "multi_hop",
+      "expected_behavior": "answer",
+      "topic": "Học bổng",
+      "answers": [
+        "Có học phần đạt điểm F tại học kỳ lấy điểm xét cấp học bổng"
+      ],
+      "reference": "Không. Có học phần điểm F trong học kỳ xét thì không được xét học bổng, dù GPA và ĐRL đủ tiêu chuẩn.",
+      "sources": [
+        {
+          "documentId": "ae4aebbd41933c83fadf91251bf1c88c09dd3381476a5b27361ee1c512ff1923",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguyen%20Viet%20Tien/files/Quy%20%C4%91%E1%BB%8Bnh%20v%E1%BB%81%20vi%E1%BB%87c%20x%C3%A9t%20c%E1%BA%A5p%20HB%20KKHT.pdf"
+        }
+      ],
+      "note": "Lấy từ câu hỏi thật số 12 trong CSV gốc. Phải đối chiếu tiêu chuẩn (Điều 3) với các trường hợp loại trừ (Điều 4.5)."
+    },
+    {
+      "id": "m09",
+      "question": "GPA 3.5, rèn luyện 80 thì điểm xét học bổng KKHT của em là bao nhiêu?",
+      "type": "multi_hop",
+      "expected_behavior": "answer",
+      "topic": "Học bổng",
+      "answers": ["Điểm xét học bổng = [(GPA x 2) + (Điểm rèn luyện: 25)] : 3"],
+      "reference": "(3,5 × 2 + 80 : 25) : 3 = (7 + 3,2) : 3 = 3,40.",
+      "sources": [
+        {
+          "documentId": "ae4aebbd41933c83fadf91251bf1c88c09dd3381476a5b27361ee1c512ff1923",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguyen%20Viet%20Tien/files/Quy%20%C4%91%E1%BB%8Bnh%20v%E1%BB%81%20vi%E1%BB%87c%20x%C3%A9t%20c%E1%BA%A5p%20HB%20KKHT.pdf"
+        }
+      ],
+      "note": "Kiểm tra bot áp dụng công thức và tính đúng."
+    },
+    {
+      "id": "f01",
+      "question": "Kỳ hè được đăng ký tối đa 12 tín đúng không ạ?",
+      "type": "false_premise",
+      "expected_behavior": "correct_premise",
+      "topic": "Đăng ký học",
+      "answers": ["Sinh viên được đăng ký tối đa 8 TC trong học kỳ hè"],
+      "reference": "Không đúng. Kỳ hè tối đa 8 TC.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "Đổi số 8 thành 12."
+    },
+    {
+      "id": "f02",
+      "question": "Trượt môn thì lịch thi lại lần 2 là khi nào?",
+      "type": "false_premise",
+      "expected_behavior": "correct_premise",
+      "topic": "Thi, phúc tra",
+      "answers": ["và không có lần thi lại"],
+      "reference": "Không có thi lại. Mỗi học phần chỉ thi cuối kỳ 1 lần; trượt thì phải đăng ký học lại.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "Giả định sai rằng có thi lại. Bot dễ bịa lịch thi lại."
+    },
+    {
+      "id": "f03",
+      "question": "Em thi HUST English Placement Test được 600 điểm, vậy là đủ chuẩn đầu ra tiếng Anh rồi đúng không?",
+      "type": "false_premise",
+      "expected_behavior": "correct_premise",
+      "topic": "Ngoại ngữ",
+      "answers": ["không được sử dụng để xét đạt chuẩn ngoại ngữ đầu ra"],
+      "reference": "Không. Kết quả HUST English Placement Test chỉ dùng để phân loại, xếp lớp và xét miễn học phần ngoại ngữ cơ bản, không dùng để xét chuẩn đầu ra.",
+      "sources": [
+        {
+          "documentId": "42360bb0a3b1d0855b6645e6a62f8870869261b0ad80050f2e32c54e9b9f2075",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/00_%20Quy%20%C4%91%E1%BB%8Bnh%20ngo%E1%BA%A1i%20ng%E1%BB%AF%20K71_final_%C4%91%C3%A3%20k%C3%BD.pdf"
+        }
+      ],
+      "note": "QĐ ngoại ngữ K71, ghi chú Bảng 3.1"
+    },
+    {
+      "id": "f04",
+      "question": "Rút môn kỳ hè trong 7 tuần đầu thì được giảm 50% học phí phải không?",
+      "type": "false_premise",
+      "expected_behavior": "correct_premise",
+      "topic": "Học phí",
+      "answers": [
+        "Quy định tại khoản này không áp dụng với các học phần học ở học kỳ hè"
+      ],
+      "reference": "Không. Quy định đóng 50% khi rút học phần không áp dụng cho kỳ hè.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "Quy định có thật nhưng bị áp sai phạm vi."
+    },
+    {
+      "id": "f05",
+      "question": "Bị cảnh báo mức 3 là bị đuổi học luôn à?",
+      "type": "false_premise",
+      "expected_behavior": "correct_premise",
+      "topic": "Cảnh báo, thôi học",
+      "answers": ["Sinh viên bị cảnh báo học tập mức 3 lần thứ hai liên tiếp"],
+      "reference": "Không. Chỉ bị buộc thôi học khi bị cảnh báo mức 3 lần thứ hai liên tiếp. Nếu nợ đọng giảm về ≤ 24 TC thì được hạ xuống mức 2.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "QC2025 Điều 19.1đ, 19.3a"
+    },
+    {
+      "id": "f06",
+      "question": "Mượn sách tham khảo ở phòng 102 được giữ 60 ngày đúng không?",
+      "type": "false_premise",
+      "expected_behavior": "correct_premise",
+      "topic": "Thư viện",
+      "answers": ["Thời hạn mượn: tối đa 30 ngày."],
+      "reference": "Không. Phòng 102 cho mượn tối đa 5 cuốn trong 30 ngày, gia hạn 7 ngày. Mức 60 ngày là của phòng giáo trình 111.",
+      "sources": [
+        {
+          "documentId": "ed81f3e2d28cc557a7b1d2224988b98c975328efd8d5ec8078c9aa83bb908c85",
+          "url": "https://library.hust.edu.vn/vi/node/38"
+        }
+      ],
+      "note": "Lẫn quy định của 2 phòng."
+    },
+    {
+      "id": "f07",
+      "question": "Em muốn phúc khảo điểm môn thi vấn đáp thì nộp đơn ở đâu?",
+      "type": "false_premise",
+      "expected_behavior": "correct_premise",
+      "topic": "Thi, phúc tra",
+      "answers": [
+        "Không áp dụng phúc tra hoặc khiếu nại điểm với các học phần được tổ chức thi theo hình thức vấn đáp"
+      ],
+      "reference": "Không phúc tra được: quy chế không áp dụng phúc tra/khiếu nại với học phần thi vấn đáp hoặc đánh giá trước hội đồng.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "Tiền đề ngầm: thi vấn đáp cũng phúc tra được."
+    },
+    {
+      "id": "f08",
+      "question": "Chuyển ngành chỉ cần CPA 2.0 là đủ đúng không?",
+      "type": "false_premise",
+      "expected_behavior": "correct_premise",
+      "topic": "Chuyển ngành, song bằng",
+      "answers": [
+        "Xếp loại học lực căn cứ theo điểm trung bình tích lũy (CPA) đạt từ loại khá trở lên"
+      ],
+      "reference": "Không. Cần CPA ≥ 2,5 (loại khá) cùng các điều kiện khác.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "Đổi 2,5 thành 2,0."
+    },
+    {
+      "id": "n01",
+      "question": "Học phí có được trả góp theo tháng không?",
+      "type": "no_answer",
+      "expected_behavior": "refuse",
+      "topic": "Học phí",
+      "answers": [],
+      "reference": "Tài liệu không có thông tin này.",
+      "sources": [],
+      "note": "Đã kiểm tra: không văn bản nào nhắc \"trả góp\"."
+    },
+    {
+      "id": "n02",
+      "question": "Mật khẩu wifi ở thư viện là gì vậy?",
+      "type": "no_answer",
+      "expected_behavior": "refuse",
+      "topic": "Thư viện",
+      "answers": [],
+      "reference": "Tài liệu không có thông tin này.",
+      "sources": [],
+      "note": "Có văn bản nhắc \"mật khẩu\" (tài khoản bạn đọc), nên bot dễ trả lời nhầm."
+    },
+    {
+      "id": "n03",
+      "question": "Ký túc xá giá phòng bao nhiêu một tháng?",
+      "type": "no_answer",
+      "expected_behavior": "refuse",
+      "topic": "KTX, cơ sở vật chất",
+      "answers": [],
+      "reference": "Tài liệu không có thông tin này.",
+      "sources": [],
+      "note": "Kho chưa crawl trang về ký túc xá."
+    },
+    {
+      "id": "n04",
+      "question": "Gửi xe máy trong trường mất bao nhiêu tiền?",
+      "type": "no_answer",
+      "expected_behavior": "refuse",
+      "topic": "KTX, cơ sở vật chất",
+      "answers": [],
+      "reference": "Tài liệu không có thông tin này.",
+      "sources": [],
+      "note": ""
+    },
+    {
+      "id": "n05",
+      "question": "Căng tin mấy giờ mở cửa?",
+      "type": "no_answer",
+      "expected_behavior": "refuse",
+      "topic": "KTX, cơ sở vật chất",
+      "answers": [],
+      "reference": "Tài liệu không có thông tin này.",
+      "sources": [],
+      "note": ""
+    },
+    {
+      "id": "n06",
+      "question": "Điểm chuẩn ngành Khoa học máy tính năm 2026 là bao nhiêu?",
+      "type": "no_answer",
+      "expected_behavior": "refuse",
+      "topic": "Tuyển sinh",
+      "answers": [],
+      "reference": "Tài liệu không có thông tin này.",
+      "sources": [],
+      "note": "Quy chế 2018 có nhắc \"điểm chuẩn\" nhưng không có điểm chuẩn tuyển sinh, bot dễ lấy nhầm."
+    },
+    {
+      "id": "n07",
+      "question": "Thư viện có cho mượn laptop không?",
+      "type": "no_answer",
+      "expected_behavior": "refuse",
+      "topic": "Thư viện",
+      "answers": [],
+      "reference": "Tài liệu không có thông tin này.",
+      "sources": [],
+      "note": ""
+    },
+    {
+      "id": "n08",
+      "question": "Mất thẻ sinh viên thì làm lại ở đâu, mất bao nhiêu tiền?",
+      "type": "no_answer",
+      "expected_behavior": "refuse",
+      "topic": "Thẻ, giấy tờ, thủ tục",
+      "answers": [],
+      "reference": "Tài liệu không có quy trình làm lại thẻ sinh viên. Chỉ có hướng dẫn của thư viện: báo mất cho thư viện, phòng CTSV, phòng Bảo vệ; tạm dùng giấy xác nhận sinh viên.",
+      "sources": [],
+      "note": "Bẫy gần đúng: FAQ thư viện chỉ nói về mất thẻ trong phạm vi thư viện. Bot nên nói rõ tài liệu chỉ có phần này."
+    },
+    {
+      "id": "a01",
+      "question": "Học phí bao nhiêu?",
+      "type": "ambiguous",
+      "expected_behavior": "clarify",
+      "topic": "Học phí",
+      "answers": [],
+      "reference": "Cần hỏi lại: ngành/chương trình (chuẩn, ELITECH, hợp tác quốc tế...), năm học, hệ (chính quy, VLVH, sau đại học), kỳ chính hay kỳ hè.",
+      "sources": [],
+      "note": "Câu quá chung, có hàng chục mức học phí."
+    },
+    {
+      "id": "a02",
+      "question": "Bị cảnh báo thì đăng ký được bao nhiêu tín?",
+      "type": "ambiguous",
+      "expected_behavior": "clarify",
+      "topic": "Cảnh báo, thôi học",
+      "answers": [],
+      "reference": "Cần hỏi lại mức cảnh báo và chương trình: mức 1 không bị giới hạn (24 TC); từ mức 2, CTĐT chuẩn tối đa 14 TC, ELITECH/hợp tác quốc tế tối đa 18 TC (tối thiểu 8 TC).",
+      "sources": [],
+      "note": "Bot có thể hỏi lại hoặc liệt kê đủ các trường hợp. Trả lời đúng một con số là sai."
+    },
+    {
+      "id": "a03",
+      "question": "Chuẩn đầu ra tiếng Anh là bao nhiêu?",
+      "type": "ambiguous",
+      "expected_behavior": "clarify",
+      "topic": "Ngoại ngữ",
+      "answers": [],
+      "reference": "Cần hỏi lại khóa và chương trình: ví dụ K71 chương trình chuẩn cần Bậc 3, ELITECH và tài năng cần Bậc 4; khóa cũ theo quy định riêng.",
+      "sources": [],
+      "note": ""
+    },
+    {
+      "id": "a04",
+      "question": "Thư viện mở cửa đến mấy giờ?",
+      "type": "ambiguous",
+      "expected_behavior": "clarify",
+      "topic": "Thư viện",
+      "answers": [],
+      "reference": "Cần hỏi lại phòng và ngày: phòng đọc/mượn 8h–12h, 13h30–17h30 thứ 2–6; phòng tự học đến 21h (thứ 2–6) và 19h (thứ 7, CN).",
+      "sources": [],
+      "note": ""
+    },
+    {
+      "id": "c01",
+      "question": "Buổi chiều thư viện đóng cửa lúc mấy giờ?",
+      "type": "conflict",
+      "expected_behavior": "answer_with_caveat",
+      "topic": "Thư viện",
+      "answers": ["Chiều: 13h30 – 17h30", "Chiều: 13h30 đến 17h00."],
+      "reference": "Trang \"Giờ phục vụ\" ghi 13h30–17h30, trang FAQ ghi 13h30–17h00. Bot nên nêu theo trang Giờ phục vụ (chi tiết hơn) hoặc nói rõ có hai thông tin khác nhau.",
+      "sources": [
+        {
+          "documentId": "bd6410acf07edbdf0680e6c017b4f4e6072798758b26076ce3001e30dfa99ad3",
+          "url": "https://library.hust.edu.vn/vi/node/416"
+        },
+        {
+          "documentId": "a03556e32a65ae4b8606168426eb51b4e8a72a34b4fa5348f7e1c3a321d71934",
+          "url": "https://library.hust.edu.vn/vi/node/50"
+        }
+      ],
+      "note": "Mâu thuẫn có thật trong kho. Người duyệt cần chốt nguồn ưu tiên."
+    },
+    {
+      "id": "c02",
+      "question": "Điểm thực tập tốt nghiệp dưới 5 có bị liệt không?",
+      "type": "conflict",
+      "expected_behavior": "answer_with_caveat",
+      "topic": "Điểm, đánh giá",
+      "answers": [
+        "Điểm số dưới 3 đối với các học phần khác",
+        "điểm hướng dẫn, điểm phản biện và điểm bảo vệ hội đồng đạt dưới 5,0 là điểm liệt"
+      ],
+      "reference": "Theo Quy chế 2025 (đang hiệu lực), điểm liệt dưới 5 chỉ áp dụng cho đồ án/khóa luận tốt nghiệp; thực tập tốt nghiệp thuộc \"học phần khác\", nên dưới 3 mới liệt. Quy định năm 2013 (dưới 5 là liệt với cả thực tập tốt nghiệp) đã cũ.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        },
+        {
+          "documentId": "d6c897749ceea389fad2680b0744be5248b422faeac29b78ef4875410613f790",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguyen%20Quoc%20Dat/files/DTDH_QDQC/Hoctap/Quy%20dinh%20ve%20diem%20liet.pdf"
+        }
+      ],
+      "note": "Bẫy phiên bản: văn bản 2013 vẫn nằm trong kho."
+    },
+    {
+      "id": "c03",
+      "question": "Học phí ngành KHMT 1 tín bao nhiêu tiền?",
+      "type": "conflict",
+      "expected_behavior": "answer_with_caveat",
+      "topic": "Học phí",
+      "answers": [
+        "KT Cơ điện tử, KT điện tử - viễn thông, KT điều khiển - tự động hóa, Khoa 700 học máy tính",
+        "KT Cơ điện tử, KT điện tử - viễn thông, KT điều khiển - tự động 630 hóa, Khoa học máy tính"
+      ],
+      "reference": "Năm học 2026-2027 (hiện tại): 700 nghìn đồng/TCHP. Năm 2025-2026 là 630 nghìn. Bot phải ưu tiên năm hiện hành và nêu rõ năm học.",
+      "sources": [
+        {
+          "documentId": "89774fc28348d6f105ff53b507065574dc65ad2f8b20d38dbc083e2111ba0a59",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hocphi/2026-2027/12006_Q%C4%90-%C4%90HBK.pdf"
+        },
+        {
+          "documentId": "d192981b98856c9ffcd941afdb06628d938732c5adaf75cc8a5f77b3db4bc917",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hocphi/2025-2026/QD%20HOC%20PHI%20-%202025-2026-final.pdf"
+        }
+      ],
+      "note": "Kho có học phí nhiều năm, bot dễ lấy nhầm năm cũ."
+    },
+    {
+      "id": "c04",
+      "question": "Em được phép học ở trường lâu nhất là bao lâu?",
+      "type": "conflict",
+      "expected_behavior": "answer_with_caveat",
+      "topic": "Cảnh báo, thôi học",
+      "answers": [
+        "thời gian chậm tiến độ không được vượt quá 5 học kỳ chính đối với các chương",
+        "thời gian tối đa được phép học tại ĐHBK Hà Nội không quá 2 lần thời gian theo kế hoạch học tập chuẩn"
+      ],
+      "reference": "Cử nhân được chậm tối đa 5 học kỳ chính so với kế hoạch chuẩn (kỹ sư, thạc sĩ: 2 học kỳ chính). Mức \"không quá 2 lần thời gian chuẩn\" chỉ dành cho đối tượng ưu tiên theo quy chế tuyển sinh.",
+      "sources": [
+        {
+          "documentId": "23e386c986782f67632e5e278875dac7d602c27becf5b3fdc78bcf7a31e5b0fc",
+          "url": "https://ctt.hust.edu.vn/Upload/Nguy%E1%BB%85n%20Qu%E1%BB%91c%20%C4%90%E1%BA%A1t/files/DTDH_QDQC/Hoctap/QCDT_2025_5445_QD-DHBK.pdf"
+        }
+      ],
+      "note": "golden.json cũ (qc-thoi-gian-toi-da) đang lấy nhầm điều khoản của đối tượng ưu tiên làm đáp án chung."
+    }
+  ]
+}
