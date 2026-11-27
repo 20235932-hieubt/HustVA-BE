@@ -16,6 +16,7 @@ import {
   type ResearchLookupStore,
 } from '../tools/research-lookup.js';
 import { runResearchTool } from '../tools/research-chat.js';
+import { pendingContext, validPending } from '../tools/pending-request.js';
 import {
   examSemesterFromContext,
   type ToolBudget,
@@ -100,6 +101,7 @@ export class ChatService {
     private readonly researchOptions:
       | ({ enabled: boolean; store: ResearchLookupStore } & ToolBudget)
       | undefined = undefined,
+    private readonly multiTurnToolsEnabled = false,
   ) {}
   async create(principal?: DemoPrincipal) {
     await principal?.validate();
@@ -231,12 +233,15 @@ export class ChatService {
     const started = performance.now();
     logger.info('chat.turn.received');
     const screen = checkInput(input.message, privacy, {
-      allowGradeLookup: this.gradeOptions?.enabled && Boolean(principal),
+      allowGradeLookup:
+        this.gradeOptions?.enabled &&
+        (Boolean(principal) || this.multiTurnToolsEnabled),
     });
     if (
       !screen.result &&
       isExamLookupRequest(input.message) &&
-      (!principal || !this.examOptions?.enabled)
+      ((!principal && !this.multiTurnToolsEnabled) ||
+        !this.examOptions?.enabled)
     )
       screen.result = principal
         ? reply(
@@ -251,7 +256,8 @@ export class ChatService {
           );
     if (
       !screen.result &&
-      (!this.gradeOptions?.enabled || !principal) &&
+      (!this.gradeOptions?.enabled ||
+        (!principal && !this.multiTurnToolsEnabled)) &&
       isGradeLookupRequest(input.message)
     )
       screen.result = reply(
@@ -419,6 +425,20 @@ export class ChatService {
         !screen.result && this.researchOptions?.enabled
           ? await this.researchOptions.store.load(id, tokenHash(token))
           : undefined;
+      const pendingTool =
+        this.multiTurnToolsEnabled && !screen.result
+          ? this.store.loadPending
+            ? await this.store.loadPending(id)
+            : validPending(
+                (await this.store.list(id, 50, 0)).find(
+                  (turn) =>
+                    turn.status === 'completed' &&
+                    turn.pendingTool !== undefined,
+                )?.pendingTool,
+              )
+          : undefined;
+      // Allocate new name tokens before sealing; never reuse a token from an old turn.
+      if (pendingTool) pendingContext(pendingTool, privacy);
       const lookupReferences = researchState
         ? researchReferences(researchState, privacy)
         : undefined;
@@ -473,6 +493,9 @@ export class ChatService {
                 signal,
                 prepared?.references,
                 lookupReferences,
+                this.multiTurnToolsEnabled
+                  ? { pending: pendingTool, expiresAt: conversation.expiresAt }
+                  : undefined,
               ),
               signal,
             )
@@ -486,6 +509,7 @@ export class ChatService {
         );
       // Never answer a personal grade request using retrieval/model-generated numbers.
       const gradeFallback =
+        !this.multiTurnToolsEnabled &&
         !screen.result &&
         !subjectResult &&
         isGradeLookupRequest(input.message) &&
@@ -497,6 +521,7 @@ export class ChatService {
             )
           : undefined;
       const examFallback =
+        !this.multiTurnToolsEnabled &&
         !screen.result &&
         !subjectResult &&
         isExamLookupRequest(input.message) &&
@@ -519,7 +544,17 @@ export class ChatService {
           'HUST_GRADES_DISABLED',
           'Tra cứu điểm chưa được bật trong môi trường này.',
         );
-      if (isPrivateTool(toolPlan?.id ?? '')) {
+      const continuationAuth =
+        this.multiTurnToolsEnabled &&
+        isPrivateTool(toolPlan?.pendingRequest?.tool ?? toolPlan?.id ?? '') &&
+        !principal
+          ? reply(
+              'requires_authentication',
+              'Bạn cần đăng nhập để tra cứu dữ liệu cá nhân. Mình đã giữ phần thông tin tra cứu trong phiên còn hiệu lực.',
+              'DEMO_AUTH_REQUIRED',
+            )
+          : undefined;
+      if (isPrivateTool(toolPlan?.id ?? '') && !continuationAuth) {
         if (
           !principal ||
           ownedConversation.ownerAccountId !== principal.accountId
@@ -530,8 +565,22 @@ export class ChatService {
       const result =
         screen.result ??
         subjectResult ??
+        continuationAuth ??
         examFallback ??
         gradeFallback ??
+        (toolPlan?.id === 'cancel_tool_request'
+          ? reply(
+              'answered',
+              'Đã hủy yêu cầu tra cứu đang chờ.',
+              'HUST_REQUEST_CANCELLED',
+            )
+          : toolPlan?.id === 'clarify_tool_request'
+            ? reply(
+                'needs_clarification',
+                toolPlan.clarification!,
+                'HUST_ARGUMENT_REQUIRED',
+              )
+            : undefined) ??
         (toolPlan?.research && this.tools && this.researchOptions?.enabled
           ? await abortable(
               runResearchTool(toolPlan.research, this.tools, signal, {
@@ -584,6 +633,19 @@ export class ChatService {
                 signal,
               ));
       signal.throwIfAborted();
+      if (this.multiTurnToolsEnabled) {
+        const keep =
+          ['needs_clarification', 'requires_authentication'].includes(
+            result.status,
+          ) ||
+          (result.status === 'insufficient_evidence' &&
+            !['HUST_TOOL_EMPTY', 'HUST_TOPICS_EMPTY'].includes(
+              result.reasonCode,
+            ));
+        record.pendingTool = keep
+          ? (validPending(toolPlan?.pendingRequest) ?? null)
+          : null;
+      }
       if (isPrivateTool(toolPlan?.id ?? '')) await principal?.validate();
       if (toolPlan?.id === 'get_exams' && !record.examLookup)
         record.examLookup = {

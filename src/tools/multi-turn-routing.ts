@@ -96,7 +96,11 @@ export function resolveContinuation(
   const invalid: SlotName[] = [];
   let progressed = !old;
   // Changing a name invalidates its old unit constraint unless the user supplies it again.
-  if (parsed.data.keyWord && parsed.data.keyWord !== old?.slots.keyWord)
+  if (
+    parsed.data.keyWord &&
+    old?.slots.keyWord &&
+    privacy.restore(parsed.data.keyWord) !== old.slots.keyWord
+  )
     delete slots.unitHint;
   for (const key of Object.keys(slotSchema.shape) as SlotName[]) {
     const value = parsed.data[key];

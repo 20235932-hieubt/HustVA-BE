@@ -57,6 +57,7 @@ export function getChatService(): Promise<ChatService> {
           config.gradesEnabled,
           config.examsEnabled,
           config.topicsEnabled,
+          config.multiTurnToolsEnabled,
         ),
         subjects ? { enabled: true, subjects } : undefined,
         {
@@ -72,6 +73,7 @@ export function getChatService(): Promise<ChatService> {
               maxToolRounds: config.maxToolRounds,
             }
           : undefined,
+        config.multiTurnToolsEnabled,
       );
     } catch {
       logger.error('chat.runtime.failed', {
