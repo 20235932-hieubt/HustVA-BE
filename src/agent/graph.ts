@@ -28,6 +28,7 @@ import { systemPrompt } from './prompts.js';
 import { logger } from '../observability/logger.js';
 import { currentPrivacy, publicContext } from '../privacy/session.js';
 import { publicSearchQuery, publicToolResult } from '../privacy/provider.js';
+import type { ClaimChecker } from '../system-one/claim-check.js';
 
 export interface AgentInput {
   message: string;
@@ -59,6 +60,7 @@ export function createChatAgent(
   model: AgentModel,
   knowledge: KnowledgePort,
   config: ChatConfig,
+  claimChecker?: ClaimChecker,
 ) {
   const builder = new StateGraph(State)
     .addNode('guard', (state) => {
@@ -194,11 +196,16 @@ export function createChatAgent(
             ),
           };
         }
-        const result = validateDraft(
-          parsed.data,
-          state.evidence,
-          currentPrivacy(),
-        );
+        // Site b (System One): drops unsupported claims, else same result.
+        const privacy = currentPrivacy();
+        const result = claimChecker
+          ? await claimChecker.review(
+              parsed.data,
+              state.evidence,
+              privacy,
+              signal,
+            )
+          : validateDraft(parsed.data, state.evidence, privacy);
         logger.info('guardrail.draft.validated', {
           tool: 'submit_answer',
           status: result.status,

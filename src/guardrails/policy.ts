@@ -35,6 +35,26 @@ export function redactPersonalData(
   }
 }
 
+// Canned replies shared by checkInput and the System One input gate.
+export const attackReply = (): ChatResult =>
+  reply(
+    'blocked',
+    'Mình không thể cung cấp cấu hình nội bộ hoặc bỏ qua giới hạn truy cập. Bạn có thể gửi riêng câu hỏi về công tác sinh viên để được hỗ trợ.',
+    'SEC-01',
+  );
+export const otherStudentReply = (): ChatResult =>
+  reply(
+    'blocked',
+    'Mình không cung cấp hồ sơ hoặc thông tin cá nhân của sinh viên khác. Mình có thể hướng dẫn quy định và thủ tục công khai.',
+    'PRIV-03',
+  );
+export const socialReply = (): ChatResult =>
+  reply(
+    'answered',
+    'Chào bạn! Mình hỗ trợ tra cứu thủ tục, chính sách và dịch vụ sinh viên HUST. Bạn đang cần hỗ trợ việc gì?',
+    'SOCIAL',
+  );
+
 export function checkInput(
   text: string,
   privacy?: PrivacySession,
@@ -97,11 +117,7 @@ export function checkInput(
     return {
       message: '[Yêu cầu vượt giới hạn]',
       retainUser: false,
-      result: reply(
-        'blocked',
-        'Mình không thể cung cấp cấu hình nội bộ hoặc bỏ qua giới hạn truy cập. Bạn có thể gửi riêng câu hỏi về công tác sinh viên để được hỗ trợ.',
-        'SEC-01',
-      ),
+      result: attackReply(),
     };
   if (
     /(?:xem|lay|tra cuu|cho).{0,35}(?:diem|ho so|thong tin ca nhan).{0,30}(?:cua ban |sinh vien khac|nguoi khac)/u.test(
@@ -120,11 +136,7 @@ export function checkInput(
     return {
       message,
       retainUser: true,
-      result: reply(
-        'blocked',
-        'Mình không cung cấp hồ sơ hoặc thông tin cá nhân của sinh viên khác. Mình có thể hướng dẫn quy định và thủ tục công khai.',
-        'PRIV-03',
-      ),
+      result: otherStudentReply(),
     };
   if (
     // Own profile goes on to get_student_info; grades and applications still need auth.
@@ -147,11 +159,7 @@ export function checkInput(
     return {
       message,
       retainUser: true,
-      result: reply(
-        'answered',
-        'Chào bạn! Mình hỗ trợ tra cứu thủ tục, chính sách và dịch vụ sinh viên HUST. Bạn đang cần hỗ trợ việc gì?',
-        'SOCIAL',
-      ),
+      result: socialReply(),
     };
   return { message, retainUser: true };
 }

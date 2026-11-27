@@ -25,6 +25,13 @@ export interface LogFields extends TraceContext {
   historyTurns?: number;
   evidenceCount?: number;
   port?: number;
+  systemOneSite?: string;
+  systemOneLabel?: string;
+  systemOneAction?: string;
+  systemOneProbPct?: number;
+  claimsChecked?: number;
+  claimsDropped?: number;
+  chunksDropped?: number;
 }
 
 const context = new AsyncLocalStorage<TraceContext>();
@@ -49,6 +56,9 @@ const numbers = new Set([
   'historyTurns',
   'evidenceCount',
   'port',
+  'claimsChecked',
+  'claimsDropped',
+  'chunksDropped',
 ]);
 const statuses = new Set([
   'answered',
@@ -72,6 +82,22 @@ const statuses = new Set([
   'not_configured',
   'not_found',
   'busy',
+]);
+const systemOneSites = new Set([
+  'input_gate',
+  'tool_skip',
+  'clarify',
+  'claim_check',
+  'unit_hint',
+  'relevance',
+]);
+const systemOneActions = new Set([
+  'acted',
+  'passed',
+  'low_confidence',
+  'failed',
+  'shadow',
+  'skipped',
 ]);
 
 // Only operational metadata crosses this boundary. Never accept bodies, prompts,
@@ -110,6 +136,33 @@ function safeFields(fields: LogFields): Record<string, string | number> {
       key === 'route' &&
       typeof value === 'string' &&
       /^\/[a-zA-Z0-9/:_-]{0,120}$/u.test(value)
+    )
+      safe[key] = value;
+    else if (
+      key === 'systemOneProbPct' &&
+      typeof value === 'number' &&
+      Number.isFinite(value) &&
+      value >= 0 &&
+      value <= 100
+    )
+      safe[key] = Math.round(value);
+    else if (
+      key === 'systemOneSite' &&
+      typeof value === 'string' &&
+      systemOneSites.has(value)
+    )
+      safe[key] = value;
+    else if (
+      key === 'systemOneAction' &&
+      typeof value === 'string' &&
+      systemOneActions.has(value)
+    )
+      safe[key] = value;
+    // Labels are ids we define (question ids, criteria keys), never free text.
+    else if (
+      key === 'systemOneLabel' &&
+      typeof value === 'string' &&
+      /^[a-z][a-z0-9_]{0,39}$/u.test(value)
     )
       safe[key] = value;
     else if (key === 'tool' && typeof value === 'string')

@@ -61,6 +61,8 @@ export function providerMessages(messages: BaseMessage[]): BaseMessage[] {
         output.push(new AIMessage(privacy.pseudonymize(content)));
         continue;
       }
+      // Tool-call turns are rebuilt from validated calls only; provider parts
+      // in content (e.g. Gemini functionCall + thoughtSignature) are dropped.
       output.push(
         new AIMessage({
           content: '',
