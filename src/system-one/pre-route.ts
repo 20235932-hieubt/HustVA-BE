@@ -18,7 +18,13 @@ export type LookupLabel =
   | 'doanh_nghiep'
   | 'hoc_ky'
   | 'dieu_kien_hoc_tiep'
-  | 'chuong_trinh_ky_su';
+  | 'chuong_trinh_ky_su'
+  | 'de_tai_giang_vien'
+  | 'de_tai_doanh_nghiep'
+  | 'lich_thi'
+  | 'diem_hoc_ky'
+  | 'diem_hoc_phan'
+  | 'ho_so_sinh_vien';
 export type ClarifyField = 'cohort' | 'program' | 'academic_year';
 
 export const GATE_QUESTION_ID = 'loai_cau_hoi';
@@ -31,7 +37,10 @@ export const CLARIFY_QUESTION_IDS: Readonly<Record<ClarifyField, string>> = {
   academic_year: 'can_nam_hoc',
 };
 
-/** Lookup label → catalog tool; `tai_lieu` is the only non-tool label. */
+/**
+ * Lookup label → routable catalog tool (internal tools are never selected);
+ * `tai_lieu` is the only non-tool label.
+ */
 export const LOOKUP_TOOL_IDS: Readonly<
   Record<Exclude<LookupLabel, 'tai_lieu'>, string>
 > = {
@@ -40,6 +49,12 @@ export const LOOKUP_TOOL_IDS: Readonly<
   hoc_ky: 'get_semesters',
   dieu_kien_hoc_tiep: 'get_study_conditions',
   chuong_trinh_ky_su: 'get_advanced_programs',
+  de_tai_giang_vien: 'get_teacher_research_topics',
+  de_tai_doanh_nghiep: 'get_company_research_topics',
+  lich_thi: 'get_exams',
+  diem_hoc_ky: 'get_grades',
+  diem_hoc_phan: 'get_grades_by_course',
+  ho_so_sinh_vien: 'get_student_info',
 };
 
 const GATE_CRITERIA: Readonly<Record<GateLabel, string>> = {
@@ -67,6 +82,13 @@ const LOOKUP_CRITERIA: Readonly<Record<LookupLabel, string>> = {
   hoc_ky: 'Hỏi học kỳ hiện tại hoặc danh sách học kỳ',
   dieu_kien_hoc_tiep: 'Điều kiện học kỹ sư chuyên sâu hoặc thạc sĩ',
   chuong_trinh_ky_su: 'Chương trình kỹ sư chuyên sâu theo mã ngành',
+  de_tai_giang_vien: 'Đề tài nghiên cứu, đồ án do một giảng viên hướng dẫn',
+  de_tai_doanh_nghiep: 'Đề tài thực tập, đồ án của một công ty đối tác',
+  lich_thi: 'Xem lịch thi của chính người hỏi trong một học kỳ',
+  diem_hoc_ky: 'Xem điểm các học phần của chính người hỏi, có thể theo học kỳ',
+  diem_hoc_phan: 'Xem điểm các lần học một mã học phần cụ thể của người hỏi',
+  ho_so_sinh_vien:
+    'Xem hồ sơ của chính người hỏi: lớp, ngành, cố vấn, CPA, GPA, tín chỉ, cảnh báo',
 };
 
 const CLARIFY_INSTRUCTIONS: Readonly<Record<ClarifyField, string>> = {

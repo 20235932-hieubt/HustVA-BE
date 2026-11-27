@@ -45,7 +45,7 @@ function withSession<T>(work: (privacy: PrivacySession) => T): T {
 }
 
 describe('validateDraft', () => {
-  test('answers with numbered claims, sources and citations when every id is granted', () => {
+  test('answers with numbered claims and citations when every id is granted', () => {
     const e1 = evidence('e1', {
       url: 'https://hust.example/a',
       location: 'Điều 10',
@@ -56,10 +56,7 @@ describe('validateDraft', () => {
 
     assert.equal(result.status, 'answered');
     assert.equal(result.reasonCode, 'GROUNDED');
-    assert.equal(
-      result.answer,
-      'Claim A. [1]\n\nNguồn:\n[1] Title e1 (Điều 10) - https://hust.example/a',
-    );
+    assert.equal(result.answer, 'Claim A. [1]');
     assert.deepEqual(result.citations, [
       {
         evidenceId: 'e1',
@@ -85,21 +82,20 @@ describe('validateDraft', () => {
     );
 
     assert.equal(result.status, 'answered');
-    assert.match(result.answer, /^First\. \[1\]\nSecond\. \[1, 2\]\n\nNguồn:/u);
+    assert.equal(result.answer, 'First. [1]\n\nSecond. [1, 2]');
     assert.deepEqual(
       result.citations.map((citation) => citation.evidenceId),
       ['e2', 'e1'],
     );
-    assert.match(result.answer, /\[1\] Title e2\n\[2\] Title e1$/u);
   });
 
-  test('uses default labels when evidence has no title, location or url', () => {
+  test('leaves citation fields empty when evidence has no title or url', () => {
     const result = validateDraft(
       draft(),
       grant({ id: 'e1', text: 't', isMock: false, quality: 'accepted' }),
     );
 
-    assert.match(result.answer, /\n\[1\] Tài liệu HUST$/u);
+    assert.equal(result.answer, 'Claim A. [1]');
     assert.equal(result.citations[0]?.title, '');
     assert.equal(result.citations[0]?.url, '');
   });

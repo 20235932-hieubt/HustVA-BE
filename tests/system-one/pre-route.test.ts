@@ -48,14 +48,17 @@ describe('pre-route question builders', () => {
       assert.ok('misconduct' in gate.criteria && 'meta_bot' in gate.criteria);
   });
 
-  test('lookup labels cover exactly the tools in the catalog', () => {
+  test('lookup labels cover exactly the routable tools in the catalog', () => {
     assert.deepEqual(
       Object.values(LOOKUP_TOOL_IDS).sort(),
-      toolCatalog.map((tool) => tool.id).sort(),
+      toolCatalog
+        .filter((tool) => !tool.internal)
+        .map((tool) => tool.id)
+        .sort(),
     );
   });
 
-  test('lookup question: one label per catalog tool plus tai_lieu', () => {
+  test('lookup question: one label per routable tool plus tai_lieu', () => {
     const { can_tra_cuu: lookup } = buildPreRouteQuestions(
       { inputGate: false, toolSkip: true, clarify: false },
       'x',
@@ -63,7 +66,10 @@ describe('pre-route question builders', () => {
     assert.equal(lookup?.type, 'choice');
     if (lookup?.type !== 'choice') return;
     const labels = Object.keys(lookup.criteria);
-    assert.equal(labels.length, toolCatalog.length + 1);
+    assert.equal(
+      labels.length,
+      toolCatalog.filter((tool) => !tool.internal).length + 1,
+    );
     assert.deepEqual(
       labels.filter((label) => label !== 'tai_lieu').sort(),
       Object.keys(LOOKUP_TOOL_IDS).sort(),

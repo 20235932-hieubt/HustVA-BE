@@ -293,7 +293,6 @@ describe('review (site b)', () => {
     assert.equal(result.answer, expected.answer);
     assert.match(result.answer, /tín chỉ\. \[2\]/u);
     assert.ok(!result.answer.includes('[3]'));
-    assert.match(result.answer, /\[2\] Chương trình đào tạo/u);
     assert.deepEqual(
       result.citations.map((c) => c.evidenceId),
       ['e1', 'e3'],
