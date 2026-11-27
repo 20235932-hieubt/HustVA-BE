@@ -17,7 +17,6 @@ export function getDemoAuth(): Promise<DemoAuthService | undefined> {
   let stage = 'DEMO_CONFIG';
   pending ??= (async () => {
     const config = readDemoConfig();
-    if (!config.enabled) return undefined;
     stage = 'DEMO_ACCOUNTS';
     const { accounts, version } = await loadDemoAccounts(config.accountsFile);
     stage = 'DEMO_MONGO_CONNECTION';
